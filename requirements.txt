@@ -1,0 +1,5 @@
+trimesh
+numpy
+PyQt6
+PyOpenGL
+zstd

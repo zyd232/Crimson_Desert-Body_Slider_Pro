@@ -1,0 +1,14 @@
+**/__pycache__/
+.backup/
+.vscode/
+build/
+char_config/
+crash_report/
+exported_mesh/
+exported_mod/
+exported_outfit/
+graphify-out/
+original_mesh/
+original_outfit/
+target_mesh/
+venv/
