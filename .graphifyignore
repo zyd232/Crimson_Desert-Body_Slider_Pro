@@ -1,5 +1,6 @@
 # .graphifyignore
 .backup/
+.roo/
 .vscode/
 build/
 char_config/
@@ -11,3 +12,6 @@ original_mesh/
 original_outfit/
 target_mesh/
 venv/
+build.bat
+config.json
+run_graphify.bat
