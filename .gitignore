@@ -1,6 +1,5 @@
 **/__pycache__/
 .backup/
-.github/
 .vscode/
 build/
 char_config/

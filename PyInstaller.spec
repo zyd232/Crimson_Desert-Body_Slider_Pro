@@ -7,12 +7,9 @@ from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 block_cipher = None
 
-# Directories to exclude (project working/data directories)
-exclude_dirs = [
+# Directories to exclude at root level only (project working/data directories)
+exclude_root_dirs = [
     ".backup",
-    ".github",
-    ".git",
-    ".vscode",
     "bs",
     "build",
     "char_config",
@@ -20,23 +17,37 @@ exclude_dirs = [
     "exported_mesh",
     "exported_mod",
     "exported_outfit",
-    "graphify-out",
     "language",
     "original_mesh",
     "original_outfit",
     "README",
-    "target_mesh",
-    "__pycache__"
+    "target_mesh"
+]
+
+# Directories to exclude at **any level** in the path (recursive exclusion)
+exclude_all_dirs = [
+    "__pycache__",
+    ".github",
+    ".git",
+    ".vscode",
+    "graphify-out"
+]
+
+# Files to exclude at **any level** in the path (recursive exclusion)
+exclude_all_files = [
+    # Example: ".pyc" will exclude core/.pyc and any/path/.pyc
 ]
 
 # Specific root-level files to exclude (if they appear in datas)
 exclude_root_files = [
+    ".gitignore",
     ".graphifyignore",
-    "BodySlider.spec",
     "build.bat",
     "config.json",
-    "convert_icon.py",    
-    "requirements.txt"
+    "convert_icon.py", 
+    "PyInstaller.spec",   
+    "requirements.txt",
+    "run_graphify.bat"
 ]
 
 # Collect core resources (data files in core/)
@@ -88,12 +99,20 @@ for item in a.datas:
         src, dst = item[0], item[1]
         dst_str = str(dst).lower().replace("\\", "/")
 
-        # exclude project directories
-        if any(dst_str.startswith(d + "/") for d in exclude_dirs):
+        # exclude root-level directories
+        if any(dst_str.startswith(d + "/") for d in exclude_root_dirs):
             continue
 
         # exclude specific root files (no '/' in dst)
         if "/" not in dst_str and dst_str in exclude_root_files:
+            continue
+
+        # exclude directories at any level (recursive)
+        if any("/" + d + "/" in dst_str or dst_str.startswith(d + "/") for d in exclude_all_dirs):
+            continue
+
+        # exclude files at any level (recursive)
+        if any("/" + f == dst_str[-len(f) - 1:] or dst_str == f for f in exclude_all_files):
             continue
 
         filtered_datas.append(item)

@@ -46,7 +46,7 @@ for %%I in ("%DIST_DIR%") do set "DIST_DIR=%%~fI"
 echo INFO: Using Python: "%VENV%\Scripts\python.exe"
 "%VENV%\Scripts\python.exe" -m PyInstaller --clean ^
     --distpath "%DIST_DIR%" ^
-    BodySlider.spec
+    PyInstaller.spec
 
 if exist "%DIST_DIR%\Body Slider Pro.exe" (
     echo OK: Build completed.
