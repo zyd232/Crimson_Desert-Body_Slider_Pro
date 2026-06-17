@@ -387,7 +387,7 @@ class MainWindowUIMixin:
         sliders_container_widget = QWidget()
         sliders_container_widget.setMinimumWidth(380)
         v_layout = QVBoxLayout(sliders_container_widget)
-        v_layout.setContentsMargins(0, 0, 0, 0)
+        v_layout.setContentsMargins(0, 0, 10, 0)
         v_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         btn_outfits_toggle = QPushButton("▶")

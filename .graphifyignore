@@ -1,6 +1,6 @@
 # .graphifyignore
 .backup/
-.roo/
+.github/
 .vscode/
 build/
 char_config/

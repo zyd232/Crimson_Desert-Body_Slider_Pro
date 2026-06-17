@@ -1,6 +1,6 @@
 **/__pycache__/
 .backup/
-.roo/
+.github/
 .vscode/
 build/
 char_config/
