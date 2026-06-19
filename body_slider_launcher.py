@@ -46,6 +46,8 @@ def main():
         app.setWindowIcon(QIcon(icon_path))
 
     window = BodySlider()
+    if os.path.exists(icon_path):
+        window.setWindowIcon(QIcon(icon_path))
     window.show()
     sys.exit(app.exec())
 

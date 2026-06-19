@@ -383,7 +383,7 @@ class LoadingOverlay(QWidget):
         self._parent_window = parent
 
         self.setWindowFlags(
-            Qt.WindowType.Window
+            Qt.WindowType.SplashScreen
             | Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.CustomizeWindowHint
         )
