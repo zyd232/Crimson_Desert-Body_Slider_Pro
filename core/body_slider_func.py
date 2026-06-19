@@ -2164,36 +2164,22 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                     self.finished.emit(self.mod_dir, "Cancelled by user")
                     return
 
-                # ---- Step 3: Generate manifest.json and mod.json (95%-100%) ----
-                self.progress.emit("Generating manifest files...", 95)
+                # ---- Step 3: Generate mod.json (95%-100%) ----
+                self.progress.emit("Generating mod.json...", 95)
 
                 names_list = self.char_name
 
-                manifest = {
-                    "package_kind": "modpack",
-                    "metadata": {
-                        "name": f"Body Slider MOD - {names_list}",
-                        "version": "1.0.0",
-                        "author": "Body Slider Pro - by zyd232",
-                        "description": f"Character body modifications for {names_list}",
-                    },
-                    "structure": "game_relative",
-                    "files_dir": "files",
-                    "new_paths": [],
-                    "manager_targets": ["universal"],
-                }
-
-                with open(os.path.join(self.mod_dir, "manifest.json"), "w", encoding="utf-8") as f:
-                    _json.dump(manifest, f, indent=2, ensure_ascii=False)
-
                 mod_json = {
-                    "name": f"Body Slider MOD - {names_list}",
-                    "version": "1.0.0",
-                    "author": "Body Slider Pro - by zyd232",
-                    "description": f"Character body modifications for {names_list}",
+                    "modinfo": {
+                        "title": f"Body Slider MOD - {names_list}",
+                        "name": f"Body Slider MOD - {names_list}",
+                        "author": "Body Slider Pro - by zyd232",
+                        "version": "1.0.0",
+                        "description": f"Model modifications for {names_list}",
+                        "generator": "Body Slider Pro",
+                        "nexus_url": "https://www.nexusmods.com/crimsondesert/mods/2168",
+                    },
                     "files_dir": "files",
-                    "image": "",
-                    "tags": ["character", "body"],
                 }
 
                 with open(os.path.join(self.mod_dir, "mod.json"), "w", encoding="utf-8") as f:

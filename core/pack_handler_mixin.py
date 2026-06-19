@@ -1457,33 +1457,19 @@ class PackHandlerMixin:
             if previous_active_char_id and previous_active_char_id in self.characters:
                 self.switch_character(previous_active_char_id, loading=None, force_refresh=True)
 
-            # Write manifest.json and mod.json
+            # Write mod.json
             names_list = ", ".join(packed_names) if packed_names else "Body Slider MOD"
-            manifest = {
-                "package_kind": "modpack",
-                "metadata": {
-                    "name": f"Body Slider MOD - {names_list}",
-                    "version": "1.0.0",
-                    "author": "Body Slider Pro - by zyd232",
-                    "description": f"Character body modifications for {names_list}",
-                },
-                "structure": "game_relative",
-                "files_dir": "files",
-                "new_paths": [],
-                "manager_targets": ["universal"],
-            }
-
-            with open(os.path.join(mod_subdir, "manifest.json"), "w", encoding="utf-8") as f:
-                json.dump(manifest, f, indent=2, ensure_ascii=False)
-
             mod_json = {
-                "name": f"Body Slider MOD - {names_list}",
-                "version": "1.0.0",
-                "author": "Body Slider Pro - by zyd232",
-                "description": f"Character body modifications for {names_list}",
+                "modinfo": {
+                    "title": f"Body Slider MOD - {names_list}",
+                    "name": f"Body Slider MOD - {names_list}",
+                    "author": "Body Slider Pro - by zyd232",
+                    "version": "1.0.0",
+                    "description": f"Model modifications for {names_list}",
+                    "generator": "Body Slider Pro",
+                    "nexus_url": "https://www.nexusmods.com/crimsondesert/mods/2168",
+                },
                 "files_dir": "files",
-                "image": "",
-                "tags": ["character", "body"],
             }
 
             with open(os.path.join(mod_subdir, "mod.json"), "w", encoding="utf-8") as f:
