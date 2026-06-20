@@ -1467,7 +1467,7 @@ class PackHandlerMixin:
                     "version": "1.0.0",
                     "description": f"Model modifications for {names_list}",
                     "generator": "Body Slider Pro",
-                    "nexus_url": "https://www.nexusmods.com/crimsondesert/mods/2168",
+                    "nexus_url": "https://www.nexusmods.com/crimsondesert/mods/2727",
                 },
                 "files_dir": "files",
             }
