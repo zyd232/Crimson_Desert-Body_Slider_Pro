@@ -89,6 +89,7 @@
   "msg_success": "Success",
   "msg_error": "Error",
   "processing": "Exporting...",
+  "msg_save_to": "Saved to:",
   "mod_exported_title": "MOD Exported Successfully (Incremental)",
   "mod_pac_file": "PAC File:",
   "mod_folder": "MOD Folder:",

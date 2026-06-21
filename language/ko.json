@@ -89,6 +89,7 @@
   "msg_success": "성공",
   "msg_error": "오류",
   "processing": "내보내는 중...",
+  "msg_save_to": "저장 위치:",
   "mod_exported_title": "MOD가 성공적으로 내보냈습니다 (증분 모드)",
   "mod_pac_file": "PAC 파일:",
   "mod_folder": "MOD 폴더:",

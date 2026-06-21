@@ -96,6 +96,7 @@
   "msg_success": "成功",
   "msg_error": "错误",
   "processing": "正在导出...",
+  "msg_save_to": "已保存到:",
   "mod_exported_title": "MOD 已成功导出（增量模式）",
   "mod_pac_file": "PAC 文件:",
   "mod_folder": "MOD 文件夹:",

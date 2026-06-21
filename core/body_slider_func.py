@@ -162,9 +162,6 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         self.outfit_morph_data: Dict[str, Dict[str, np.ndarray]] = {}
         self.outfit_faces: Dict[str, np.ndarray] = {}
 
-        self.btn_obj: Optional[Any] = None
-        self.btn_mod: Optional[Any] = None
-
         # Initialize frameless window management state via mixin
         self._init_window_manager_state()
 
@@ -1640,10 +1637,12 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
     # ---------- export OBJ ----------
 
     def save_model_obj(self):
-        if not self.btn_obj:
+        page = self._current_page()
+        btn_obj = getattr(page, "btn_obj", None) if page else None
+        if not btn_obj:
             return
-        self.btn_obj.setText(self.T["processing"])
-        self.btn_obj.setEnabled(False)
+        btn_obj.setText(self.T["processing"])
+        btn_obj.setEnabled(False)
         QApplication.processEvents()
         char_id = self.active_char_id or "default"
         out_dir = os.path.join(self.root_dir, "exported_mesh")
@@ -1670,8 +1669,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         except Exception as e:
             show_critical(self, self.T["msg_error"], str(e))
         finally:
-            self.btn_obj.setText(self.T["btn_export_obj"])
-            self.btn_obj.setEnabled(True)
+            btn_obj.setText(self.T["btn_export_obj"])
+            btn_obj.setEnabled(True)
 
     def _export_current_mesh_to_obj(self, obj_path: str):
         if not self.pac_mesh or not hasattr(self.pac_mesh, "submeshes"):
