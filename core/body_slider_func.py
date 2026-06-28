@@ -162,6 +162,11 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         self.outfit_morph_data: Dict[str, Dict[str, np.ndarray]] = {}
         self.outfit_faces: Dict[str, np.ndarray] = {}
 
+        # Outfit slider link states (link/unlink between outfit and character sliders)
+        self.outfit_link_states: Dict[str, bool] = {}
+        self.outfit_slider_values: Dict[str, float] = {}
+        self.outfit_slider_mapping: Dict[str, Optional[str]] = {}
+
         # Initialize frameless window management state via mixin
         self._init_window_manager_state()
 
@@ -743,7 +748,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         # Clear outfit sliders
         outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
         if outfit_sliders_panel:
-            outfit_sliders_panel.clear_sliders()
+            outfit_sliders_panel.clear_sliders(show_empty=True)
 
     def _on_outfits_unload_all(self):
         char_id = self.active_char_id or ""
@@ -751,7 +756,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         # Clear outfit sliders
         outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
         if outfit_sliders_panel:
-            outfit_sliders_panel.clear_sliders()
+            outfit_sliders_panel.clear_sliders(show_empty=True)
         # Refresh slider UI to properly remove the Outfits panel
         # and hide the toggle button when no outfits remain
         self.refresh_slider_ui()
@@ -1669,6 +1674,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         """
         Sync character slider values to the outfit sliders panel.
         This ensures outfit sliders display the same value as character sliders.
+        Skips sliders that are currently unlinked.
         """
         outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
         if not outfit_sliders_panel:
@@ -1678,9 +1684,14 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         for outfit_key, widgets in outfit_sliders_panel._slider_widgets.items():
             info = widgets["info"]
             char_sid = info.get("char_slider_id")
-            if char_sid and char_sid in self.sliders_info:
-                char_value = self.sliders_info[char_sid].get("current_value", 0.0)
-                outfit_sliders_panel.update_slider_value(outfit_key, char_value)
+            if not char_sid or char_sid not in self.sliders_info:
+                continue
+            # Skip unlinked sliders
+            if not self.outfit_link_states.get(outfit_key, True):
+                continue
+            char_value = self.sliders_info[char_sid].get("current_value", 0.0)
+            self.outfit_slider_values[outfit_key] = char_value
+            outfit_sliders_panel.update_slider_value(outfit_key, char_value)
 
     # ---------- export OBJ ----------
 

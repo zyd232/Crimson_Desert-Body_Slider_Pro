@@ -318,14 +318,30 @@ class OutfitSlidersPanel(QWidget):
             if item.widget():
                 item.widget().deleteLater()
 
-    def clear_sliders(self):
-        """Remove all outfit slider widgets."""
+    def clear_sliders(self, show_empty: bool = False):
+        """
+        Remove all outfit slider widgets.
+
+        Args:
+            show_empty: If True, show "no sliders" placeholder labels and keep
+                panels visible. Used when deactivating an outfit so the panels
+                do not disappear. If False (default), only clears the widgets
+                without adding placeholders. Used internally by load_sliders().
+        """
         self._clear_layout(self.default_scroll_layout, self.default_scroll_content)
         self._clear_layout(self.custom_scroll_layout, self.custom_scroll_content)
         self._slider_widgets.clear()
-        # Hide both panels when empty
-        self.default_panel.hide()
-        self.custom_panel.hide()
+        if show_empty:
+            # Show "no sliders" placeholder labels
+            self.default_scroll_layout.addWidget(
+                QLabel(self._tr("no_outfit_sliders"))
+            )
+            self.custom_scroll_layout.addWidget(
+                QLabel(self._tr("no_outfit_sliders"))
+            )
+            # Keep both panels visible even when no outfit is activated
+            self.default_panel.show()
+            self.custom_panel.show()
 
     def load_sliders(self, outfit_sliders_info: Dict[str, Dict[str, Any]]):
         """
@@ -337,11 +353,19 @@ class OutfitSlidersPanel(QWidget):
         if not outfit_sliders_info:
             return
 
+        # Initialize link states and slider values for each outfit key
+        for key, info in outfit_sliders_info.items():
+            if key not in self.main.outfit_link_states:
+                self.main.outfit_link_states[key] = True  # default: linked
+            if key not in self.main.outfit_slider_values:
+                self.main.outfit_slider_values[key] = info.get("current_value", 0.0)
+            self.main.outfit_slider_mapping[key] = info.get("char_slider_id")
+
         # Separate into default and custom
         default_sliders: List[Tuple[str, Dict[str, Any]]] = []
         custom_sliders: List[Tuple[str, Dict[str, Any]]] = []
 
-        for key, info in sorted(outfit_sliders_info.items()):
+        for key, info in outfit_sliders_info.items():
             if info.get("is_custom", False):
                 custom_sliders.append((key, info))
             else:
@@ -386,11 +410,35 @@ class OutfitSlidersPanel(QWidget):
         row_main_layout.setContentsMargins(5, 5, 5, 10)
         row_main_layout.setSpacing(6)
 
-        # Name label
+        # Name row: [link toggle button] [name label]
+        name_row = QHBoxLayout()
+        name_row.setSpacing(6)
+
+        # Link toggle button (only when there is a matched character slider)
+        link_btn = None
+        if char_slider_id:
+            link_btn = QPushButton()
+            link_btn.setObjectName("outfit_link_toggle")
+            link_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            linked = self.main.outfit_link_states.get(outfit_key, True)
+            if linked:
+                link_btn.setText("🔗")
+                link_btn.setToolTip(self._tr("tooltip_outfit_link_linked"))
+            else:
+                link_btn.setText("⛓️‍💥")
+                link_btn.setToolTip(self._tr("tooltip_outfit_link_unlinked"))
+            # Capture outfit_key for the closure
+            ok_key = outfit_key
+            link_btn.clicked.connect(
+                lambda _: self._toggle_outfit_link(ok_key, info, link_btn)
+            )
+            name_row.addWidget(link_btn)
+
         from core.ui_components import ForceWrapLabel
         name_lbl = ForceWrapLabel(label_text)
         name_lbl.setObjectName("slider_name")
-        row_main_layout.addWidget(name_lbl)
+        name_row.addWidget(name_lbl, stretch=1)
+        row_main_layout.addLayout(name_row)
 
         # Tools layout: slider + spinbox
         tools_layout = QHBoxLayout()
@@ -447,7 +495,42 @@ class OutfitSlidersPanel(QWidget):
             "slider": slider,
             "spin": spin,
             "info": info,
+            "link_btn": link_btn,
         }
+
+    def _toggle_outfit_link(self, outfit_key: str, info: Dict[str, Any], link_btn: QPushButton):
+        """Toggle the link/unlink state for an outfit slider."""
+        currently_linked = self.main.outfit_link_states.get(outfit_key, True)
+        new_linked = not currently_linked
+        self.main.outfit_link_states[outfit_key] = new_linked
+
+        char_slider_id = info.get("char_slider_id")
+
+        if new_linked:
+            # Unlink -> Link: force outfit slider value to match character slider
+            link_btn.setText("🔗")
+            link_btn.setToolTip(self._tr("tooltip_outfit_link_linked"))
+            if char_slider_id and char_slider_id in self.main.sliders_info:
+                char_val = self.main.sliders_info[char_slider_id].get("current_value", 0.0)
+                info["current_value"] = char_val
+                self.main.outfit_slider_values[outfit_key] = char_val
+                # Update UI without emitting signals (avoid circular trigger)
+                widgets = self._slider_widgets.get(outfit_key)
+                if widgets:
+                    slider = widgets["slider"]
+                    spin = widgets["spin"]
+                    slider.blockSignals(True)
+                    spin.blockSignals(True)
+                    slider.setValue(int(char_val * 100))
+                    spin.setValue(char_val)
+                    slider.blockSignals(False)
+                    spin.blockSignals(False)
+                # Emit signal to update outfit mesh
+                self.outfitSliderValueChanged.emit(outfit_key, char_val, char_slider_id)
+        else:
+            # Link -> Unlink
+            link_btn.setText("⛓️‍💥")
+            link_btn.setToolTip(self._tr("tooltip_outfit_link_unlinked"))
 
     def update_slider_value(self, outfit_key: str, value: float):
         """

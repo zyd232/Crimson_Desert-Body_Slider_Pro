@@ -20,6 +20,8 @@
   "btn_add": "+ 사용자 정의 슬라이더 추가",
   "btn_export_obj": "모델 내보내기 (.obj)",
   "btn_export_mod": "MOD 폴더로 패키징 및 내보내기",
+  "btn_add_custom_slider": "+ 사용자 정의 슬라이더 추가",
+  "btn_export_mod_folder": "MOD 폴더로 내보내기",
   "btn_reset_cam": "카메라 초기화",
   "btn_wireframe_toggle": "와이어프레임",
   "btn_text_reset": "초기화",
@@ -240,6 +242,8 @@
   "group_outfit_default": "의상 기본 슬라이더",
   "group_outfit_custom": "의상 커스텀 슬라이더",
   "no_outfit_sliders": "사용 가능한 의상 슬라이더가 없습니다.",
+  "tooltip_outfit_link_linked": "클릭하여 연결 해제 — 값이 캐릭터 슬라이더와 동기화됨",
+  "tooltip_outfit_link_unlinked": "클릭하여 연결 — 값이 캐릭터 슬라이더 값으로 동기화됩니다",
   "loading_ellipsis": "로딩 중...",
 
   "outfit_submesh_mismatch_title": "의상 서브메시 불일치 경고",

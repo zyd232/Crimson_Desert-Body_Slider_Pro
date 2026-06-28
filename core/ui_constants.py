@@ -624,6 +624,10 @@ SLIDERS_PANEL_MIN_WIDTH = 200
 BTN_EXPORT_ROW_MARGINS = (0, 4, 0, 8)  # (left, top, right, bottom) - bottom=8 to align with viewer bottom bar
 BTN_EXPORT_ROW_SPACING = 6
 
+# -- Two-row export buttons layout (Row1: Add Custom + Export OBJ, Row2: Export MOD) --
+BTN_EXPORT_TWO_ROW_MARGINS = (0, 4, 0, 8)  # (left, top, right, bottom)
+BTN_EXPORT_TWO_ROW_SPACING = 6              # spacing within each row and between rows
+
 # -- Outfits panel bottom margin (matches button row bottom margin so Outfits bottom aligns with buttons bottom) --
 OUTFIT_PANEL_BOTTOM_MARGIN = 8
 
@@ -1550,5 +1554,23 @@ QPushButton#btn_deselect_all:hover {{
 }}
 QPushButton#btn_deselect_all:pressed {{
     background-color: {COLOR_BG_PRESS};
+}}
+
+/* Outfit link toggle button (circular) */
+QPushButton#outfit_link_toggle {{
+    background: transparent;
+    border: 1px solid {COLOR_BORDER};
+    border-radius: 14px;
+    color: {COLOR_TEXT_BRIGHT};
+    font-size: 12px;
+    padding: 0px;
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+}}
+QPushButton#outfit_link_toggle:hover {{
+    background-color: {COLOR_ACCENT};
+    border-color: {COLOR_ACCENT};
 }}
 """

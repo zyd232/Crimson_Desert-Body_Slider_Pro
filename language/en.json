@@ -20,6 +20,8 @@
   "btn_add": "+ Add Custom Slider",
   "btn_export_obj": "Export Model (.obj)",
   "btn_export_mod": "Package and Export as MOD Folder",
+  "btn_add_custom_slider": "+ Add Custom Slider",
+  "btn_export_mod_folder": "Export as MOD Folder",
   "btn_reset_cam": "Reset Camera",
   "btn_wireframe_toggle": "Wireframe",
   "btn_text_reset": "Reset",
@@ -240,6 +242,8 @@
   "group_outfit_default": "Outfit Default Sliders",
   "group_outfit_custom": "Outfit Custom Sliders",
   "no_outfit_sliders": "No outfit sliders available.",
+  "tooltip_outfit_link_linked": "Click to unlink — value synced with character slider",
+  "tooltip_outfit_link_unlinked": "Click to link — value will sync to character slider value",
   "loading_ellipsis": "Loading...",
 
   "outfit_submesh_mismatch_title": "Outfit Submesh Mismatch Warning",

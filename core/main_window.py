@@ -69,6 +69,8 @@ from core.ui_constants import (
     SLIDERS_PANEL_MIN_WIDTH,
     BTN_EXPORT_ROW_MARGINS,
     BTN_EXPORT_ROW_SPACING,
+    BTN_EXPORT_TWO_ROW_MARGINS,
+    BTN_EXPORT_TWO_ROW_SPACING,
 )
 
 
@@ -588,27 +590,39 @@ class MainWindowUIMixin:
         # outer_splitter takes up the main space (stretch=1)
         v_layout.addWidget(outer_splitter, stretch=1)
 
-        # Bottom buttons row: placed in sliders_container so Outfits bottom aligns with buttons bottom
-        btns_row = QHBoxLayout()
-        btns_row.setSpacing(BTN_EXPORT_ROW_SPACING)
-        btns_row.setContentsMargins(*BTN_EXPORT_ROW_MARGINS)
+        # Bottom buttons: two-row layout
+        #   Row 1: + Add Custom Slider | Export Model (.obj)
+        #   Row 2: Export as MOD Folder (full width)
+        btns_outer = QVBoxLayout()
+        btns_outer.setSpacing(BTN_EXPORT_TWO_ROW_SPACING)
+        btns_outer.setContentsMargins(*BTN_EXPORT_TWO_ROW_MARGINS)
 
         btn_add_custom = SmoothHoverButton(self.T.get("btn_add_custom_slider", "+ Add Custom Slider"))
         btn_add_custom.setObjectName("btn_base_primary")
         btn_add_custom.clicked.connect(self.guide_add_slider)
-        btns_row.addWidget(btn_add_custom, stretch=1)
 
         btn_obj = SmoothHoverButton(self.T.get("btn_export_obj", "Export Model (.obj)"))
         btn_obj.setObjectName("btn_base_primary")
         btn_obj.clicked.connect(self.save_model_obj)
-        btns_row.addWidget(btn_obj, stretch=1)
 
         btn_mod = SmoothHoverButton(self.T.get("btn_export_mod_folder", "Export as MOD Folder"))
         btn_mod.setObjectName("btn_base_primary_green")
         btn_mod.clicked.connect(self.package_and_export_mod)
-        btns_row.addWidget(btn_mod, stretch=1)
 
-        sliders_layout.addLayout(btns_row)
+        # Row 1: Add Custom Slider + Export OBJ (equal width)
+        btns_row1 = QHBoxLayout()
+        btns_row1.setSpacing(BTN_EXPORT_TWO_ROW_SPACING)
+        btns_row1.addWidget(btn_add_custom, stretch=1)
+        btns_row1.addWidget(btn_obj, stretch=1)
+        btns_outer.addLayout(btns_row1)
+
+        # Row 2: Export MOD Folder (full width)
+        btns_row2 = QHBoxLayout()
+        btns_row2.setSpacing(BTN_EXPORT_TWO_ROW_SPACING)
+        btns_row2.addWidget(btn_mod, stretch=1)
+        btns_outer.addLayout(btns_row2)
+
+        sliders_layout.addLayout(btns_outer)
 
         page.btn_add_custom = btn_add_custom
         page.btn_obj = btn_obj
@@ -1211,11 +1225,15 @@ class MainWindowUIMixin:
     ):
         """
         Called when an outfit slider value changes.
-        Sync the value to the corresponding character slider if matched.
+        If linked: sync the value to the corresponding character slider.
+        If unlinked: only update the outfit mesh independently.
         """
-        if char_slider_id and char_slider_id in self.sliders_info:
-            # Update character slider data
+        linked = self.outfit_link_states.get(outfit_key, True)
+
+        if linked and char_slider_id and char_slider_id in self.sliders_info:
+            # Linked state: two-way sync (existing behavior)
             self.sliders_info[char_slider_id]["current_value"] = value
+            self.outfit_slider_values[outfit_key] = value
             # Update character slider UI widgets (sync display)
             widgets = getattr(self, "_char_slider_widgets", {})
             char_widgets = widgets.get(char_slider_id)
@@ -1232,3 +1250,8 @@ class MainWindowUIMixin:
             self.save_config()
             # Update morphs (this will also update outfit mesh)
             self.update_all_morphs()
+        else:
+            # Unlinked state: only update outfit mesh
+            self.outfit_slider_values[outfit_key] = value
+            if hasattr(self, "outfit_mgr") and self.outfit_mgr:
+                self.outfit_mgr.update_outfit_morphs()

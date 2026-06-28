@@ -24,6 +24,8 @@
   "btn_add": "＋ 添加自定义滑块",
   "btn_export_obj": "导出模型 (.obj)",
   "btn_export_mod": "打包并导出为mod文件夹",
+  "btn_add_custom_slider": "＋ 添加自定义滑块",
+  "btn_export_mod_folder": "导出为 MOD 文件夹",
   "btn_reset_cam": "重置视角",
   "btn_wireframe_toggle": "线框",
   "btn_text_reset": "重置数值",
@@ -269,6 +271,8 @@
   "group_outfit_default": "服装默认滑块",
   "group_outfit_custom": "服装自定义滑块",
   "no_outfit_sliders": "暂无服装滑块",
+  "tooltip_outfit_link_linked": "点击断开 — 当前数值与角色滑块同步",
+  "tooltip_outfit_link_unlinked": "点击链接 — 数值将同步至角色滑块",
   "loading_ellipsis": "加载中...",
 
   "outfit_submesh_mismatch_title": "服装子网格不匹配警告",

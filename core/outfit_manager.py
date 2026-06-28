@@ -136,6 +136,31 @@ class OutfitHost:
         from core.pac_builder import parse_pac
         return parse_pac(data, path)
 
+    # Outfit link state (mirrors attributes on app)
+    @property
+    def outfit_link_states(self) -> Dict[str, bool]:
+        return getattr(self._app, "outfit_link_states", {})
+
+    @outfit_link_states.setter
+    def outfit_link_states(self, v: Dict[str, bool]):
+        self._app.outfit_link_states = v
+
+    @property
+    def outfit_slider_values(self) -> Dict[str, float]:
+        return getattr(self._app, "outfit_slider_values", {})
+
+    @outfit_slider_values.setter
+    def outfit_slider_values(self, v: Dict[str, float]):
+        self._app.outfit_slider_values = v
+
+    @property
+    def outfit_slider_mapping(self) -> Dict[str, Optional[str]]:
+        return getattr(self._app, "outfit_slider_mapping", {})
+
+    @outfit_slider_mapping.setter
+    def outfit_slider_mapping(self, v: Dict[str, Optional[str]]):
+        self._app.outfit_slider_mapping = v
+
     # UI helpers (thin wrappers)
     def current_page(self):
         return self._app._current_page()
@@ -436,10 +461,29 @@ class OutfitManager:
         if not has_outfit_mesh:
             return
 
+        # -- Build effective sliders_info for unlinked outfit sliders --
+        sliders_info = h.sliders_info
+        link_states = h.outfit_link_states or {}
+        slider_values = h.outfit_slider_values or {}
+        slider_mapping = h.outfit_slider_mapping or {}
+
+        if link_states:
+            effective_info: Dict[str, Dict[str, Any]] = dict(sliders_info)
+            for outfit_key, linked in link_states.items():
+                if not linked:
+                    char_sid = slider_mapping.get(outfit_key)
+                    if char_sid and char_sid in effective_info:
+                        val = slider_values.get(outfit_key, 0.0)
+                        # Shallow copy to avoid mutating original data
+                        entry = dict(effective_info[char_sid])
+                        entry["current_value"] = val
+                        effective_info[char_sid] = entry
+            sliders_info = effective_info
+
         outfit_morphed = h.apply_morphs(
             h.outfit_original_points,
             outfit_morph_data,
-            h.sliders_info,
+            sliders_info,
         )
 
         for key in list(h.mesh_viewer_data.keys()):
