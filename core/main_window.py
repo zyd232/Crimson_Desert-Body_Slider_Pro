@@ -398,16 +398,26 @@ class MainWindowUIMixin:
 
         def _on_outfits_toggle():
             outfits_panel = getattr(page, "outfits_panel", None)
+            outfit_default_panel = getattr(page, "outfit_default_sliders_panel", None)
+            outfit_custom_panel = getattr(page, "outfit_custom_sliders_panel", None)
             if outfits_panel is None:
                 return
             will_show = not outfits_panel.isVisible()
             self.outfit_mgr.adjust_window_width(will_show)
             if will_show:
                 outfits_panel.show()
+                if outfit_default_panel is not None:
+                    outfit_default_panel.show()
+                if outfit_custom_panel is not None:
+                    outfit_custom_panel.show()
                 btn_outfits_toggle.setText("◀")
                 btn_outfits_toggle.setToolTip(self.T.get("btn_toggle_outfits_hide", "Hide Outfits Panel"))
             else:
                 outfits_panel.hide()
+                if outfit_default_panel is not None:
+                    outfit_default_panel.hide()
+                if outfit_custom_panel is not None:
+                    outfit_custom_panel.hide()
                 btn_outfits_toggle.setText("▶")
                 btn_outfits_toggle.setToolTip(self.T.get("btn_toggle_outfits_show", "Show Outfits Panel"))
 
@@ -447,7 +457,7 @@ class MainWindowUIMixin:
         timer = QTimer(self)
         timer.setSingleShot(True)
         timer.timeout.connect(
-            lambda: self._init_main_splitter_sizes_safe(splitter, is_default_char)
+            lambda: self._init_main_splitter_sizes_safe(splitter, is_default_char, has_outfits)
         )
         timer.start(150)
         self._splitter_timers.append(timer)
@@ -551,6 +561,22 @@ class MainWindowUIMixin:
             page.outfits_panel = outfits_panel
             self.outfits_panel = outfits_panel
 
+            # Outfit Sliders panels (added as independent children for six-panel layout)
+            from core.ui_outfits import OutfitSlidersPanel
+            outfit_sliders_panel = OutfitSlidersPanel(self, char_id)
+            outfit_sliders_panel.outfitSliderValueChanged.connect(
+                self._on_outfit_slider_value_changed
+            )
+            # Add the two independent panels directly to outer_splitter
+            outer_splitter.addWidget(outfit_sliders_panel.default_panel)
+            outer_splitter.addWidget(outfit_sliders_panel.custom_panel)
+            page.outfit_sliders_panel = outfit_sliders_panel
+            page.outfit_default_sliders_panel = outfit_sliders_panel.default_panel
+            page.outfit_custom_sliders_panel = outfit_sliders_panel.custom_panel
+            self.outfit_sliders_panel = outfit_sliders_panel
+
+            # Default shown together with Outfits panel
+
         # Sync viewer has_outfits_panel after outfits_panel is (not) created
         try:
             viewer = self._plotter
@@ -587,6 +613,10 @@ class MainWindowUIMixin:
         page.btn_add_custom = btn_add_custom
         page.btn_obj = btn_obj
         page.btn_mod = btn_mod
+
+        # Save splitter references for resize handling
+        page.outer_splitter = outer_splitter
+        page.sliders_h_splitter = sliders_h_splitter
 
         # Initialize splitter sizes
         self._init_sliders_splitter_sizes(outer_splitter, sliders_h_splitter, is_default_char, has_outfits)
@@ -636,7 +666,7 @@ class MainWindowUIMixin:
         def_main = QVBoxLayout(def_group)
         def_scroll = QScrollArea()
         def_scroll.setWidgetResizable(True)
-        def_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        def_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         def_scroll_content = QWidget()
         def_layout = QVBoxLayout(def_scroll_content)
         def_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -659,7 +689,7 @@ class MainWindowUIMixin:
         cg_main = QVBoxLayout(cust_group)
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_content = QWidget()
         cg_layout = QVBoxLayout(scroll_content)
         cg_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -732,6 +762,10 @@ class MainWindowUIMixin:
         slider.setValue(int(def_v * 100))
         row_main_layout.addWidget(slider)
 
+        # Track character slider widgets for outfit sync
+        if sid and not hasattr(self, "_char_slider_widgets"):
+            self._char_slider_widgets: Dict[str, Dict[str, Any]] = {}
+
         def update_logic(v: float):
             try:
                 if sid and sid in self.sliders_info:
@@ -760,6 +794,12 @@ class MainWindowUIMixin:
             )
         )
 
+        # Register widget references for outfit slider sync
+        if sid:
+            if not hasattr(self, "_char_slider_widgets"):
+                self._char_slider_widgets = {}
+            self._char_slider_widgets[sid] = {"slider": slider, "spin": spin}
+
         if missing:
             warn = self._create_clickable_warning(
                 self.T["slider_missing_file"],
@@ -777,21 +817,21 @@ class MainWindowUIMixin:
 
     # ========== splitter size init ==========
 
-    def _init_main_splitter_sizes(self, splitter: QSplitter, is_default_char: bool = False):
-        ui_init_main_splitter_sizes(splitter, is_default_char)
+    def _init_main_splitter_sizes(self, splitter: QSplitter, is_default_char: bool = False, has_outfits: bool = False):
+        ui_init_main_splitter_sizes(splitter, is_default_char, has_outfits)
 
-    def _init_main_splitter_sizes_safe(self, splitter: QSplitter, is_default_char: bool = False):
+    def _init_main_splitter_sizes_safe(self, splitter: QSplitter, is_default_char: bool = False, has_outfits: bool = False):
         try:
             if splitter is None or splitter.parent() is None:
                 return
             splitter.window()
-            self._init_main_splitter_sizes(splitter, is_default_char)
+            self._init_main_splitter_sizes(splitter, is_default_char, has_outfits)
         except (RuntimeError, SystemError):
             return
         except Exception:
             return
 
-    def _init_splitter_by_index(self, index: int, is_default_char: bool = False):
+    def _init_splitter_by_index(self, index: int, is_default_char: bool = False, has_outfits: bool = False):
         try:
             if not hasattr(self, "char_stack"):
                 return
@@ -804,7 +844,7 @@ class MainWindowUIMixin:
             if splitter is None or splitter.parent() is None:
                 return
             splitter.window()
-            self._init_main_splitter_sizes(splitter, is_default_char)
+            self._init_main_splitter_sizes(splitter, is_default_char, has_outfits)
         except (RuntimeError, SystemError):
             return
         except Exception:
@@ -858,14 +898,26 @@ class MainWindowUIMixin:
             if total <= 0:
                 return
 
-            # Outer splitter: [Sliders Container] | [Outfits]
-            if has_outfits:
+            # Outer splitter layout:
+            #   has_outfits=True: [Sliders Container] [Outfits] [Outfit Default] [Outfit Custom] = 4 children
+            #     Sliders Container contains 2 panels (Default+Custom) via inner splitter
+            #     So 4 children represent 5 equal panels
+            #   has_outfits=False: [Sliders Container] = 1 child
+            if has_outfits and outer_splitter.count() >= 4:
+                # Five equal panels within outer_splitter (each = total/5)
+                # Sliders container = 2 panels = 2/5 of outer_splitter width
+                panel_w = total // 5
+                sliders_w = panel_w * 2
+                sizes = [sliders_w, panel_w, panel_w, panel_w]
+                # Adjust last element to account for rounding
+                sizes[-1] = total - sum(sizes[:-1])
+                outer_splitter.setSizes(sizes)
+            elif has_outfits:
+                # Fallback for backward compatibility
                 if is_default_char:
-                    # 3 equal panels: sliders 2/3, outfits 1/3
                     sliders_w = int(total * 2 / 3)
                     outfits_w = total - sliders_w
                 else:
-                    # 2 equal panels: sliders 1/2, outfits 1/2
                     sliders_w = total // 2
                     outfits_w = total - sliders_w
                 outer_splitter.setSizes([sliders_w, outfits_w])
@@ -1058,6 +1110,43 @@ class MainWindowUIMixin:
     def _on_splitter_resize_stable(self):
         self._splitter_resizing = False
 
+        # Re-apply splitter proportions after resize stabilizes
+        self._reapply_splitter_proportions()
+
+    def _reapply_splitter_proportions(self):
+        """
+        Re-apply the correct splitter proportions to the current page's splitter.
+        Called after resize stabilizes to maintain consistent 3D preview width.
+        """
+        try:
+            page = self._current_page()
+            if page is None:
+                return
+            splitter = getattr(page, "splitter", None)
+            if splitter is None or splitter.parent() is None:
+                return
+            splitter.window()
+
+            # Determine character type and outfits state
+            char_id = self.active_char_id
+            is_default_char = self.characters.get(char_id, {}).get("is_default", False) if char_id else False
+            has_outfits = hasattr(page, "outfits_panel") and page.outfits_panel is not None
+
+            # Re-apply main splitter sizes
+            self._init_main_splitter_sizes(splitter, is_default_char, has_outfits)
+
+            # Re-apply sliders splitter sizes if outer_splitter exists
+            outer_splitter = getattr(page, "outer_splitter", None)
+            sliders_h_splitter = getattr(page, "sliders_h_splitter", None)
+            if outer_splitter is not None and sliders_h_splitter is not None:
+                self._apply_sliders_splitter_sizes(
+                    outer_splitter, sliders_h_splitter, is_default_char, has_outfits
+                )
+        except (RuntimeError, SystemError):
+            pass
+        except Exception:
+            pass
+
     def _cancel_splitter_timers(self):
         if not hasattr(self, "_splitter_timers"):
             return
@@ -1114,3 +1203,32 @@ class MainWindowUIMixin:
         """
         from core.ui_components import create_clickable_warning as ui_create_clickable_warning
         return ui_create_clickable_warning(text, tooltip, on_click)
+
+    # ========== Outfit Slider sync ==========
+
+    def _on_outfit_slider_value_changed(
+        self, outfit_key: str, value: float, char_slider_id: Optional[str]
+    ):
+        """
+        Called when an outfit slider value changes.
+        Sync the value to the corresponding character slider if matched.
+        """
+        if char_slider_id and char_slider_id in self.sliders_info:
+            # Update character slider data
+            self.sliders_info[char_slider_id]["current_value"] = value
+            # Update character slider UI widgets (sync display)
+            widgets = getattr(self, "_char_slider_widgets", {})
+            char_widgets = widgets.get(char_slider_id)
+            if char_widgets:
+                char_slider = char_widgets["slider"]
+                char_spin = char_widgets["spin"]
+                char_slider.blockSignals(True)
+                char_spin.blockSignals(True)
+                char_slider.setValue(int(value * 100))
+                char_spin.setValue(value)
+                char_slider.blockSignals(False)
+                char_spin.blockSignals(False)
+            # Save config (only character slider data)
+            self.save_config()
+            # Update morphs (this will also update outfit mesh)
+            self.update_all_morphs()

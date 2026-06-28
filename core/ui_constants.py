@@ -159,6 +159,11 @@ T = {
     "btn_toggle_outfits_show": "Show Outfits Panel",
     "btn_toggle_outfits_hide": "Hide Outfits Panel",
 
+    # Outfit Sliders panels
+    "group_outfit_default": "Outfit Default Sliders",
+    "group_outfit_custom": "Outfit Custom Sliders",
+    "no_outfit_sliders": "No outfit sliders available.",
+
     # File tree toolbar tooltips
     "tooltip_tree_expand_all": "Expand All",
     "tooltip_tree_collapse_all": "Collapse All",
@@ -503,6 +508,10 @@ TAB_SCROLL_STYLE = f"""
 # -- Outfits panel width constants --
 OUTFIT_PANEL_MIN_WIDTH = 180
 OUTFIT_PANEL_MAX_WIDTH = 400
+
+# -- Outfit Sliders panel width constants --
+OUTFIT_SLIDERS_PANEL_MIN_WIDTH = 200
+OUTFIT_SLIDERS_PANEL_MAX_WIDTH = 420
 
 # -- File tree toolbar button styles --
 

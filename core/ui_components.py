@@ -669,15 +669,21 @@ def reposition_overlay_button(interactor: QWidget, btn_reset_cam: QPushButton,
         btn_wireframe.raise_()
 
 
-def init_main_splitter_sizes(splitter: QSplitter, is_default_char: bool = False) -> None:
+def init_main_splitter_sizes(splitter: QSplitter, is_default_char: bool = False, has_outfits: bool = False) -> None:
     try:
         if not _qt_object_alive(splitter) or splitter.count() != 2:
             return
         w = splitter.width()
         if w <= 0 or w < 400:
-            QTimer.singleShot(50, lambda: init_main_splitter_sizes(splitter, is_default_char))
+            QTimer.singleShot(50, lambda: init_main_splitter_sizes(splitter, is_default_char, has_outfits))
             return
-        left = int(w * 0.33) if is_default_char else int(w * 0.5)
+        if has_outfits:
+            # Six-panel layout: 3D preview = 1/6, right wrapper = 5/6
+            left = int(w / 6)
+        elif is_default_char:
+            left = int(w * 0.33)
+        else:
+            left = int(w * 0.5)
         splitter.setSizes([left, w - left])
     except (RuntimeError, SystemError, Exception):
         pass
@@ -1108,7 +1114,7 @@ def create_slider_group(
     group_main = QVBoxLayout(group)
     scroll = QScrollArea()
     scroll.setWidgetResizable(True)
-    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
     scroll_content = QWidget()
     scroll_layout = QVBoxLayout(scroll_content)
     scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)

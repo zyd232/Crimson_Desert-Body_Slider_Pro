@@ -450,22 +450,193 @@ class OutfitManager:
                 continue
             h.update_mesh_vertices(key, outfit_morphed[base_name])
 
+    # ---------- outfit slider discovery ----------
+
+    def discover_outfit_sliders(self, char_id: str, active_outfit_mod_path: str) -> Dict[str, Dict[str, Any]]:
+        """
+        Scan exported_outfit/{char_id}/ for sliders that have meshes
+        for the currently active outfit.
+
+        Returns an OrderedDict-like dict mapping outfit_slider_key -> slider_info.
+        The order follows the character slider order in sliders_info (default first, then custom).
+        Each info contains:
+            - short_id: the slider segment (e.g. "breast_size_type_01")
+            - name: display name (from character slider if matched, else short_id)
+            - min: min value (from character slider if matched, else -50)
+            - max: max value (from character slider if matched, else 150)
+            - current_value: current value from character slider if matched, else 0
+            - char_slider_id: the full character slider ID if matched, else None
+            - is_custom: True if the slider is under "custom/" subdirectory
+        """
+        h = self.host
+        root_dir = h.root_dir
+        sliders_info = h.sliders_info
+
+        exported_root = os.path.join(root_dir, "exported_outfit", char_id)
+        if not os.path.isdir(exported_root):
+            return {}
+
+        # mod_path is relative from original_outfit_root, e.g.
+        # "breast_size_type_01/character/model/1_pc/2_phw/armor/9_upperbody/cd_phw_00_ub_00_0170.pac"
+        pac_base = os.path.basename(active_outfit_mod_path)
+        base_no_ext = os.path.splitext(pac_base)[0]
+        mod_dir = os.path.dirname(active_outfit_mod_path)
+
+        # Build a lookup: short_id -> discovered info
+        discovered: Dict[str, Dict[str, Any]] = {}
+
+        try:
+            entries = sorted(os.listdir(exported_root))
+        except OSError:
+            return {}
+
+        for entry in entries:
+            entry_path = os.path.join(exported_root, entry)
+            if not os.path.isdir(entry_path):
+                continue
+
+            # Determine is_custom and short_id
+            if entry == "custom":
+                try:
+                    custom_entries = sorted(os.listdir(entry_path))
+                except OSError:
+                    continue
+                for sub_entry in custom_entries:
+                    sub_path = os.path.join(entry_path, sub_entry)
+                    if not os.path.isdir(sub_path):
+                        continue
+                    short_id = sub_entry
+                    slider_dir = sub_path
+                    candidates = [
+                        os.path.join(slider_dir, mod_dir, pac_base),
+                        os.path.join(slider_dir, mod_dir, base_no_ext + ".obj"),
+                        os.path.join(slider_dir, mod_dir, base_no_ext + ".pac"),
+                    ]
+                    has_mesh = any(os.path.exists(c) for c in candidates)
+                    if not has_mesh:
+                        continue
+                    char_sid = self._find_char_slider_by_short_id(short_id, char_id, sliders_info, is_custom=True)
+                    if char_sid:
+                        cinfo = sliders_info[char_sid]
+                        name = cinfo.get("name", short_id)
+                        min_v = float(cinfo.get("min", -50))
+                        max_v = float(cinfo.get("max", 150))
+                        cur_v = float(cinfo.get("current_value", 0))
+                    else:
+                        name = short_id
+                        min_v = -50.0
+                        max_v = 150.0
+                        cur_v = 0.0
+                    key = f"outfit_{short_id}"
+                    discovered[key] = {
+                        "short_id": short_id,
+                        "name": name,
+                        "min": min_v,
+                        "max": max_v,
+                        "current_value": cur_v,
+                        "char_slider_id": char_sid,
+                        "is_custom": True,
+                    }
+            else:
+                short_id = entry
+                candidates = [
+                    os.path.join(entry_path, mod_dir, pac_base),
+                    os.path.join(entry_path, mod_dir, base_no_ext + ".obj"),
+                    os.path.join(entry_path, mod_dir, base_no_ext + ".pac"),
+                ]
+                has_mesh = any(os.path.exists(c) for c in candidates)
+                if not has_mesh:
+                    continue
+                char_sid = self._find_char_slider_by_short_id(short_id, char_id, sliders_info)
+                if char_sid:
+                    cinfo = sliders_info[char_sid]
+                    name = cinfo.get("name", short_id)
+                    min_v = float(cinfo.get("min", -50))
+                    max_v = float(cinfo.get("max", 150))
+                    cur_v = float(cinfo.get("current_value", 0))
+                else:
+                    name = short_id
+                    min_v = -50.0
+                    max_v = 150.0
+                    cur_v = 0.0
+                key = f"outfit_{short_id}"
+                discovered[key] = {
+                    "short_id": short_id,
+                    "name": name,
+                    "min": min_v,
+                    "max": max_v,
+                    "current_value": cur_v,
+                    "char_slider_id": char_sid,
+                    "is_custom": False,
+                }
+
+        # Order by character slider order (sliders_info iteration order)
+        result: Dict[str, Dict[str, Any]] = {}
+        for full_sid, info in sliders_info.items():
+            parts = full_sid.split(".", 1)
+            if len(parts) == 2:
+                fid_short_id = parts[1]
+                key = f"outfit_{fid_short_id}"
+                if key in discovered:
+                    result[key] = discovered[key]
+
+        # Append any discovered sliders not matched to character sliders
+        for key, info in discovered.items():
+            if key not in result:
+                result[key] = info
+
+        return result
+
+    @staticmethod
+    def _find_char_slider_by_short_id(
+        short_id: str, char_id: str, sliders_info: Dict[str, Dict[str, Any]],
+        is_custom: bool = False
+    ) -> Optional[str]:
+        """
+        Find the character slider full_id that corresponds to the outfit slider.
+
+        For default sliders: match by short_id part of full_id (e.g. "breast_size_type_01")
+        For custom sliders: match by path containing "custom/{short_id}"
+            (e.g. target_mesh/{char_id}/custom/{short_id}.obj)
+
+        Returns the full_id if found, None otherwise.
+        """
+        for full_id, info in sliders_info.items():
+            if is_custom:
+                # Custom slider: match by path containing "custom/{short_id}"
+                path = info.get("path", "")
+                # Normalize path separators
+                normalized = path.replace("\\", "/")
+                # Check if path contains "custom/{short_id}"
+                if f"custom/{short_id}" in normalized:
+                    return full_id
+            else:
+                # Default slider: match by short_id part of full_id
+                parts = full_id.split(".", 1)
+                if len(parts) == 2:
+                    fid_char_id, fid_short_id = parts
+                    if fid_char_id == char_id and fid_short_id == short_id:
+                        return full_id
+        return None
+
     # ---------- window width for outfits panel ----------
 
     def adjust_window_width(self, show_panel: bool):
         """
         Adjust main window width based on whether OutfitsPanel is shown.
+        Now controls 3 panels: Outfits, Outfit Default Sliders, Outfit Custom Sliders.
         """
         h = self.host
         if h.is_maximized():
             return
 
-        outfit_w = 240
+        # Each panel ~200px, 3 panels total
+        outfit_w = 200 * 3
         w = h.window_width()
 
         if show_panel:
-            if w < 1600:
+            if w < 1800:
                 h.resize_window(w + outfit_w, h.window_height())
         else:
-            if w > 1100:
+            if w > 1300:
                 h.resize_window(w - outfit_w, h.window_height())

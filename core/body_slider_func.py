@@ -231,9 +231,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             if 600 <= w <= 2560 and 400 <= h <= 1440:
                 self.resize(w, h)
             else:
-                self.resize(1300, 900)
+                self.resize(1800, 900)
         else:
-            self.resize(1300, 900)
+            self.resize(1800, 900)
         self.setStyleSheet(QSS_STYLESHEET)
 
         # Create central widget and layout early so LoadingOverlay
@@ -687,10 +687,13 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
 
         page_index = self.char_stack.currentIndex()
         is_default_char = self.characters.get(char_id, {}).get("is_default", False)
+        has_outfits = False
+        if hasattr(self, "outfit_mgr"):
+            has_outfits = self.outfit_mgr.has_outfits_for_char(char_id)
         timer = QTimer(self)
         timer.setSingleShot(True)
         timer.timeout.connect(
-            lambda idx=page_index, default=is_default_char: self._init_splitter_by_index(idx, default)
+            lambda idx=page_index, default=is_default_char, outfits=has_outfits: self._init_splitter_by_index(idx, default, outfits)
         )
         timer.start(50)
         self._splitter_timers.append(timer)
@@ -707,23 +710,48 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         outfit_w = 240
         w = self.width()
         if show_panel:
-            if w < 1600:
+            if w < 1800:
                 self.resize(w + outfit_w, self.height())
         else:
-            if w > 1100:
+            if w > 1300:
                 self.resize(w - outfit_w, self.height())
 
     # ---------- Outfits handlers (delegated to OutfitManager) ----------
 
     def _on_outfit_activated(self, original_path: str, mod_path: str):
         self.outfit_mgr.activate_outfit(original_path, mod_path)
+        # Load outfit sliders for the activated outfit
+        self._load_outfit_sliders(mod_path)
+
+    def _load_outfit_sliders(self, mod_path: str):
+        """
+        Discover and load outfit sliders for the currently active outfit.
+        """
+        char_id = self.active_char_id or ""
+        if not char_id:
+            return
+        outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
+        if not outfit_sliders_panel:
+            return
+        # Discover sliders from outfit_manager
+        outfit_sliders_info = self.outfit_mgr.discover_outfit_sliders(char_id, mod_path)
+        # Load into UI panel
+        outfit_sliders_panel.load_sliders(outfit_sliders_info)
 
     def _on_outfit_deactivated(self, original_path: str):
         self.outfit_mgr.deactivate_outfit()
+        # Clear outfit sliders
+        outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
+        if outfit_sliders_panel:
+            outfit_sliders_panel.clear_sliders()
 
     def _on_outfits_unload_all(self):
         char_id = self.active_char_id or ""
         self.outfit_mgr.unload_all_outfits(char_id)
+        # Clear outfit sliders
+        outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
+        if outfit_sliders_panel:
+            outfit_sliders_panel.clear_sliders()
         # Refresh slider UI to properly remove the Outfits panel
         # and hide the toggle button when no outfits remain
         self.refresh_slider_ui()
@@ -1633,6 +1661,26 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             and self.outfit_mgr.host.active_outfit_path
         ):
             self.outfit_mgr.update_outfit_morphs()
+
+        # Sync character slider values to outfit sliders panel
+        self._sync_char_sliders_to_outfit()
+
+    def _sync_char_sliders_to_outfit(self):
+        """
+        Sync character slider values to the outfit sliders panel.
+        This ensures outfit sliders display the same value as character sliders.
+        """
+        outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
+        if not outfit_sliders_panel:
+            return
+        # For each outfit slider that has a matched character slider,
+        # update the outfit slider display with the character slider value
+        for outfit_key, widgets in outfit_sliders_panel._slider_widgets.items():
+            info = widgets["info"]
+            char_sid = info.get("char_slider_id")
+            if char_sid and char_sid in self.sliders_info:
+                char_value = self.sliders_info[char_sid].get("current_value", 0.0)
+                outfit_sliders_panel.update_slider_value(outfit_key, char_value)
 
     # ---------- export OBJ ----------
 

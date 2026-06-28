@@ -266,6 +266,9 @@
   "tooltip_tree_select_all": "全选",
   "tooltip_tree_deselect_all": "取消全选",
   "label_no_outfit_data": "无服装数据",
+  "group_outfit_default": "服装默认滑块",
+  "group_outfit_custom": "服装自定义滑块",
+  "no_outfit_sliders": "暂无服装滑块",
   "loading_ellipsis": "加载中...",
 
   "outfit_submesh_mismatch_title": "服装子网格不匹配警告",

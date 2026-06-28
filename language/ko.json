@@ -237,6 +237,9 @@
   "tooltip_tree_select_all": "전체 선택",
   "tooltip_tree_deselect_all": "전체 해제",
   "label_no_outfit_data": "의상 데이터 없음",
+  "group_outfit_default": "의상 기본 슬라이더",
+  "group_outfit_custom": "의상 커스텀 슬라이더",
+  "no_outfit_sliders": "사용 가능한 의상 슬라이더가 없습니다.",
   "loading_ellipsis": "로딩 중...",
 
   "outfit_submesh_mismatch_title": "의상 서브메시 불일치 경고",
