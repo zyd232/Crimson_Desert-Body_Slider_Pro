@@ -11,6 +11,8 @@ exported_outfit/
 original_mesh/
 original_outfit/
 target_mesh/
+test/
+tests/
 venv/
 build.bat
 config.json

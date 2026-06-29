@@ -11,5 +11,7 @@ graphify-out/
 /original_mesh/
 /original_outfit/
 /target_mesh/
+/test/
+/tests/
 /venv/
 /config.json
