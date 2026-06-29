@@ -161,6 +161,11 @@ class OutfitHost:
     def outfit_slider_mapping(self, v: Dict[str, Optional[str]]):
         self._app.outfit_slider_mapping = v
 
+    # Outfit config manager
+    @property
+    def outfit_config_mgr(self):
+        return getattr(self._app, "outfit_config_mgr", None)
+
     # UI helpers (thin wrappers)
     def current_page(self):
         return self._app._current_page()
@@ -431,6 +436,11 @@ class OutfitManager:
                     shutil.rmtree(d)
                 except Exception:
                     pass
+
+        # Delete outfit config file
+        ocm = h.outfit_config_mgr
+        if ocm:
+            ocm.delete_config(char_id)
 
         # Refresh outfits panel
         h.sync_outfits_panel_for_char(char_id)

@@ -217,6 +217,10 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         # Mount outfit manager
         self.outfit_mgr = OutfitManager(self)
 
+        # Mount outfit config manager
+        from core.outfit_config_manager import OutfitConfigManager
+        self.outfit_config_mgr = OutfitConfigManager(self.root_dir)
+
         window_flags = (
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowMinimizeButtonHint
@@ -740,8 +744,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             return
         # Discover sliders from outfit_manager
         outfit_sliders_info = self.outfit_mgr.discover_outfit_sliders(char_id, mod_path)
-        # Load into UI panel
-        outfit_sliders_panel.load_sliders(outfit_sliders_info)
+        # Load into UI panel (pass mod_path for config persistence)
+        outfit_sliders_panel.load_sliders(outfit_sliders_info, mod_path)
 
     def _on_outfit_deactivated(self, original_path: str):
         self.outfit_mgr.deactivate_outfit()
@@ -753,6 +757,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
     def _on_outfits_unload_all(self):
         char_id = self.active_char_id or ""
         self.outfit_mgr.unload_all_outfits(char_id)
+        # Delete outfit config file
+        self.outfit_config_mgr.delete_config(char_id)
         # Clear outfit sliders
         outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
         if outfit_sliders_panel:
@@ -1139,6 +1145,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                     except OSError:
                         pass
 
+                # Delete outfit config file
+                self.outfit_config_mgr.delete_config(char_id_for_delete)
+
                 del self.characters[char_id_for_delete]
                 self.character_sliders.pop(char_id_for_delete, None)
                 
@@ -1238,6 +1247,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         self.sliders_info.clear()
         self.morph_data.clear()
 
+        # Delete outfit config file
+        self.outfit_config_mgr.delete_config(char_id)
+
         self._refresh_3d_preview(refresh_sliders_ui=True)
 
     # ---------- reset_all_sliders ----------
@@ -1268,6 +1280,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                     shutil.rmtree(d)
                 except Exception:
                     pass
+
+        # Delete outfit config file
+        self.outfit_config_mgr.delete_config(char_id)
 
         new_pac = os.path.join(self.root_dir, "original_mesh", DEFAULT_CHAR_ID, DEFAULT_PAC_NAME)
 

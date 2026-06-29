@@ -26,7 +26,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 
 from core.ui_file_tree import OutfitFileTree
 from core.ui_dialogs import UnloadAllOutfitsDialog
-from core.ui_components import NoWheelSlider, NoWheelSpinBox
+from core.ui_components import NoWheelSlider, NoWheelSpinBox, SmoothHoverButton
 from core.ui_constants import (
     OUTFIT_PANEL_MIN_WIDTH,
     OUTFIT_PANEL_MAX_WIDTH,
@@ -271,6 +271,9 @@ class OutfitSlidersPanel(QWidget):
         # key -> {"slider": QSlider, "spin": NoWheelSpinBox, "info": dict}
         self._slider_widgets: Dict[str, Dict[str, Any]] = {}
 
+        # Current outfit mod_path for config persistence
+        self._outfit_mod_path: str = ""
+
         # Create the two independent panels (not added to self layout)
         self.default_panel = _OutfitSingleSlidersPanel(
             self._tr("group_outfit_default"), self
@@ -343,22 +346,45 @@ class OutfitSlidersPanel(QWidget):
             self.default_panel.show()
             self.custom_panel.show()
 
-    def load_sliders(self, outfit_sliders_info: Dict[str, Dict[str, Any]]):
+    def load_sliders(
+        self,
+        outfit_sliders_info: Dict[str, Dict[str, Any]],
+        outfit_mod_path: str = "",
+    ):
         """
         Load outfit sliders from discovered info.
-        outfit_sliders_info: dict mapping outfit_key -> slider_info
+
+        Args:
+            outfit_sliders_info: dict mapping outfit_key -> slider_info
+            outfit_mod_path: the mod_path of the currently active outfit file
+                (used as top-level key in outfit_config JSON)
         """
         self.clear_sliders()
+        self._outfit_mod_path = outfit_mod_path
 
         if not outfit_sliders_info:
             return
 
-        # Initialize link states and slider values for each outfit key
+        # Initialize link states and slider values for each outfit key,
+        # loading saved config from outfit_config JSON when available.
         for key, info in outfit_sliders_info.items():
+            saved = self._load_saved_slider_config(info)
+            short_id = info.get("short_id", "")
+            is_linked = saved.get("is_linked", True) if saved else True
+
             if key not in self.main.outfit_link_states:
-                self.main.outfit_link_states[key] = True  # default: linked
+                self.main.outfit_link_states[key] = is_linked
+
             if key not in self.main.outfit_slider_values:
-                self.main.outfit_slider_values[key] = info.get("current_value", 0.0)
+                if not is_linked and saved:
+                    # Unlinked: use saved current_value from JSON
+                    self.main.outfit_slider_values[key] = saved.get(
+                        "current_value", info.get("current_value", 0.0)
+                    )
+                else:
+                    # Linked: use character slider value
+                    self.main.outfit_slider_values[key] = info.get("current_value", 0.0)
+
             self.main.outfit_slider_mapping[key] = info.get("char_slider_id")
 
         # Separate into default and custom
@@ -402,8 +428,20 @@ class OutfitSlidersPanel(QWidget):
         label_text = info.get("name", outfit_key)
         min_v = float(info.get("min", -50))
         max_v = float(info.get("max", 150))
-        def_v = float(info.get("current_value", 0))
         char_slider_id = info.get("char_slider_id")
+
+        # Determine link state and default value from saved config
+        linked = self.main.outfit_link_states.get(outfit_key, True)
+        saved = self._load_saved_slider_config(info)
+
+        if linked:
+            # Linked: use character slider value
+            def_v = float(info.get("current_value", 0))
+        else:
+            # Unlinked: use saved current_value from JSON
+            def_v = float(
+                saved.get("current_value", info.get("current_value", 0))
+            ) if saved else float(info.get("current_value", 0))
 
         row_widget = QWidget()
         row_main_layout = QVBoxLayout(row_widget)
@@ -420,7 +458,6 @@ class OutfitSlidersPanel(QWidget):
             link_btn = QPushButton()
             link_btn.setObjectName("outfit_link_toggle")
             link_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            linked = self.main.outfit_link_states.get(outfit_key, True)
             if linked:
                 link_btn.setText("🔗")
                 link_btn.setToolTip(self._tr("tooltip_outfit_link_linked"))
@@ -440,7 +477,12 @@ class OutfitSlidersPanel(QWidget):
         name_row.addWidget(name_lbl, stretch=1)
         row_main_layout.addLayout(name_row)
 
-        # Tools layout: slider + spinbox
+        # Slider widget (created first so reset button can reference it)
+        slider = NoWheelSlider(Qt.Orientation.Horizontal)
+        slider.setRange(int(min_v * 100), int(max_v * 100))
+        slider.setValue(int(def_v * 100))
+
+        # Tools layout: reset button + spinbox + %
         tools_layout = QHBoxLayout()
         tools_layout.setSpacing(8)
         tools_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
@@ -451,14 +493,22 @@ class OutfitSlidersPanel(QWidget):
         spin.setValue(float(def_v))
         spin.setFixedWidth(60)
 
+        # Reset button — same style as Default/Custom Sliders reset button
+        reset_btn = SmoothHoverButton(self._tr("btn_text_reset", "Reset"))
+        reset_btn.setObjectName("btn_base_secondary")
+        # Capture variables for closure
+        ok_key = outfit_key
+        ok_info = info
+        ok_char_sid = char_slider_id
+        reset_btn.clicked.connect(
+            lambda _: self._reset_slider_to_default(ok_key, ok_info, ok_char_sid, slider, spin)
+        )
+
+        tools_layout.addWidget(reset_btn)
         tools_layout.addStretch()
         tools_layout.addWidget(spin)
         tools_layout.addWidget(QLabel("%"))
         row_main_layout.addLayout(tools_layout)
-
-        slider = NoWheelSlider(Qt.Orientation.Horizontal)
-        slider.setRange(int(min_v * 100), int(max_v * 100))
-        slider.setValue(int(def_v * 100))
         row_main_layout.addWidget(slider)
 
         # Value change handler
@@ -468,6 +518,10 @@ class OutfitSlidersPanel(QWidget):
                 info["current_value"] = v
                 # Emit signal for synchronization with character sliders
                 self.outfitSliderValueChanged.emit(outfit_key, v, char_slider_id)
+                # Save current_value to outfit_config (only when unlinked)
+                current_linked = self.main.outfit_link_states.get(outfit_key, True)
+                if not current_linked:
+                    self._save_slider_config(info, v)
             except Exception:
                 pass
 
@@ -527,10 +581,72 @@ class OutfitSlidersPanel(QWidget):
                     spin.blockSignals(False)
                 # Emit signal to update outfit mesh
                 self.outfitSliderValueChanged.emit(outfit_key, char_val, char_slider_id)
+            # Save is_linked state only (do NOT modify min/max/current_value in JSON)
+            self._save_slider_link_state(info, new_linked, preserve_values=True)
         else:
-            # Link -> Unlink
+            # Link -> Unlink: read saved params from JSON and update slider UI
             link_btn.setText("⛓️‍💥")
             link_btn.setToolTip(self._tr("tooltip_outfit_link_unlinked"))
+
+            # Load saved config and update slider params from JSON
+            saved = self._load_saved_slider_config(info)
+            if saved:
+                saved_min = float(saved.get("min", info.get("min", -50)))
+                saved_max = float(saved.get("max", info.get("max", 150)))
+                saved_val = float(saved.get("current_value", info.get("current_value", 0)))
+                info["min"] = saved_min
+                info["max"] = saved_max
+                info["current_value"] = saved_val
+                self.main.outfit_slider_values[outfit_key] = saved_val
+
+                # Update UI widgets
+                widgets = self._slider_widgets.get(outfit_key)
+                if widgets:
+                    slider = widgets["slider"]
+                    spin = widgets["spin"]
+                    slider.blockSignals(True)
+                    spin.blockSignals(True)
+                    slider.setRange(int(saved_min * 100), int(saved_max * 100))
+                    slider.setValue(int(saved_val * 100))
+                    spin.setRange(saved_min, saved_max)
+                    spin.setValue(saved_val)
+                    slider.blockSignals(False)
+                    spin.blockSignals(False)
+
+                # Emit signal to update outfit mesh with new values
+                self.outfitSliderValueChanged.emit(outfit_key, saved_val, char_slider_id)
+
+            # Save is_linked state to outfit_config
+            self._save_slider_link_state(info, new_linked, preserve_values=True)
+
+    def _reset_slider_to_default(
+        self,
+        outfit_key: str,
+        info: Dict[str, Any],
+        char_slider_id: Optional[str],
+        slider: "NoWheelSlider",
+        spin: "NoWheelSpinBox",
+    ):
+        """Reset a single outfit slider to its default value (0.00)."""
+        default_value = 0.0
+        info["current_value"] = default_value
+        self.main.outfit_slider_values[outfit_key] = default_value
+
+        # Update UI without emitting signals (avoid circular trigger)
+        slider.blockSignals(True)
+        spin.blockSignals(True)
+        slider.setValue(int(default_value * 100))
+        spin.setValue(default_value)
+        slider.blockSignals(False)
+        spin.blockSignals(False)
+
+        # Emit signal to update outfit mesh
+        self.outfitSliderValueChanged.emit(outfit_key, default_value, char_slider_id)
+
+        # Save reset value to outfit_config if unlinked
+        linked = self.main.outfit_link_states.get(outfit_key, True)
+        if not linked:
+            self._save_slider_config(info, default_value)
 
     def update_slider_value(self, outfit_key: str, value: float):
         """
@@ -554,3 +670,87 @@ class OutfitSlidersPanel(QWidget):
     def reload_for_character(self, char_id: str):
         """Update character ID reference."""
         self.char_id = char_id
+
+    # ---------- outfit_config helpers ----------
+
+    def _load_saved_slider_config(
+        self, info: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Load saved slider config from outfit_config/{char_id}.json.
+        Returns slider_info dict or None.
+        """
+        ocm = getattr(self.main, "outfit_config_mgr", None)
+        if not ocm or not self._outfit_mod_path:
+            return None
+        short_id = info.get("short_id", "")
+        return ocm.get_slider(self.char_id, self._outfit_mod_path, short_id)
+
+    def _save_slider_config(
+        self, info: Dict[str, Any], current_value: float
+    ) -> None:
+        """
+        Save slider's current_value to outfit_config JSON.
+        Only called when is_linked is False.
+        """
+        ocm = getattr(self.main, "outfit_config_mgr", None)
+        if not ocm or not self._outfit_mod_path:
+            return
+        short_id = info.get("short_id", "")
+        slider_data: Dict[str, Any] = {
+            "name": info.get("name", short_id),
+            "min": float(info.get("min", -50)),
+            "max": float(info.get("max", 150)),
+            "current_value": current_value,
+            "is_linked": False,
+        }
+        ocm.save_slider(self.char_id, self._outfit_mod_path, short_id, slider_data)
+
+    def _save_slider_link_state(
+        self, info: Dict[str, Any], is_linked: bool, preserve_values: bool = False
+    ) -> None:
+        """
+        Save is_linked state change to outfit_config JSON.
+
+        Args:
+            info: slider info dict
+            is_linked: new link state
+            preserve_values: If True, only update is_linked and keep existing
+                min/max/current_value from JSON. Used when switching to linked
+                so that the saved independent values are preserved for future
+                unlinked use.
+        """
+        ocm = getattr(self.main, "outfit_config_mgr", None)
+        if not ocm or not self._outfit_mod_path:
+            return
+        short_id = info.get("short_id", "")
+
+        if preserve_values:
+            # Only update is_linked, keep existing min/max/current_value from JSON
+            saved = self._load_saved_slider_config(info)
+            if saved:
+                slider_data: Dict[str, Any] = {
+                    "name": saved.get("name", info.get("name", short_id)),
+                    "min": float(saved.get("min", info.get("min", -50))),
+                    "max": float(saved.get("max", info.get("max", 150))),
+                    "current_value": float(saved.get("current_value", 0.0)),
+                    "is_linked": is_linked,
+                }
+            else:
+                # No existing saved data — write defaults
+                slider_data = {
+                    "name": info.get("name", short_id),
+                    "min": float(info.get("min", -50)),
+                    "max": float(info.get("max", 150)),
+                    "current_value": float(info.get("current_value", 0.0)),
+                    "is_linked": is_linked,
+                }
+        else:
+            slider_data = {
+                "name": info.get("name", short_id),
+                "min": float(info.get("min", -50)),
+                "max": float(info.get("max", 150)),
+                "current_value": float(info.get("current_value", 0.0)),
+                "is_linked": is_linked,
+            }
+        ocm.save_slider(self.char_id, self._outfit_mod_path, short_id, slider_data)
