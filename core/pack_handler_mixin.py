@@ -14,6 +14,7 @@ Integrated from:
 - pack_handler_mixin.py (previous stub)
 """
 
+import copy
 import os
 import json
 import shutil
@@ -212,6 +213,11 @@ class PackHandlerMixin:
 
             # outfit data
             if char_id in outfit_char_ids:
+                # Also include outfit_config for this character
+                outfit_config_path = os.path.join(self.root_dir, "outfit_config", f"{char_id}.json")
+                if os.path.exists(outfit_config_path):
+                    file_list.append((outfit_config_path, f"outfit_config/{char_id}.json"))
+
                 for outfit_dir_name in ("original_outfit", "exported_outfit"):
                     outfit_char_dir = os.path.join(self.root_dir, outfit_dir_name, char_id)
                     if os.path.isdir(outfit_char_dir):
@@ -889,6 +895,13 @@ class PackHandlerMixin:
                                 else:
                                     shutil.copy2(sp, dp)
 
+                    # Handle outfit_config for imported characters
+                    self._handle_outfit_config_import(
+                        temp_dir, root_dir, selected_ids,
+                        get_effective_cid, overwrite_ids, outfit_overwrite_ids,
+                        outfit_merge_ids, outfit_merge_results,
+                    )
+
                     # Collect character IDs that have outfit changes (for index rebuild later)
                     outfit_changed_ids: Set[str] = set()
                     
@@ -1505,6 +1518,95 @@ class PackHandlerMixin:
         finally:
             self.btn_mod.setText(self.T["btn_export_mod"])
             self.btn_mod.setEnabled(True)
+
+    # ---------- outfit_config import helper ----------
+
+    def _handle_outfit_config_import(
+        self,
+        temp_dir: str,
+        root_dir: str,
+        selected_ids: List[str],
+        get_effective_cid,
+        overwrite_ids: Set[str],
+        outfit_overwrite_ids: Set[str],
+        outfit_merge_ids: List[str],
+        outfit_merge_results: Dict[str, Dict[str, Any]],
+    ) -> None:
+        """
+        Handle outfit_config/{char_id}.json during pack import.
+
+        - Overwrite / new character: direct copy
+        - Merge: follow user outfit file choices to decide which config to keep
+        """
+        # Collect new_ids (not in overwrite_ids, not existing)
+        existing_ids = set(self.characters.keys())
+        new_ids = [cid for cid in selected_ids if cid not in existing_ids]
+
+        for cid in selected_ids:
+            effective_cid = get_effective_cid(cid)
+            src_config_path = os.path.join(temp_dir, "outfit_config", f"{cid}.json")
+            if not os.path.exists(src_config_path):
+                continue
+
+            dst_config_dir = os.path.join(root_dir, "outfit_config")
+            dst_config_path = os.path.join(dst_config_dir, f"{effective_cid}.json")
+
+            # --- Overwrite or new character: direct copy ---
+            if cid in outfit_overwrite_ids or cid in new_ids:
+                os.makedirs(dst_config_dir, exist_ok=True)
+                shutil.copy2(src_config_path, dst_config_path)
+                continue
+
+            # --- Merge character: follow user outfit file choices ---
+            if cid not in outfit_merge_ids:
+                continue
+
+            # Read pack outfit_config
+            pack_config_data: Dict[str, Any] = {}
+            try:
+                with open(src_config_path, "r", encoding="utf-8") as f:
+                    pack_config_data = json.load(f)
+            except Exception:
+                continue
+
+            # Read existing outfit_config
+            existing_config_data: Dict[str, Any] = {}
+            if os.path.exists(dst_config_path):
+                try:
+                    with open(dst_config_path, "r", encoding="utf-8") as f:
+                        existing_config_data = json.load(f)
+                except Exception:
+                    pass
+
+            # Get user choices for outfit files {rel_path: "pack" | "existing"}
+            merge_result = outfit_merge_results.get(cid, {})
+            user_choices: Dict[str, str] = merge_result.get("choices", {})
+
+            # Merge: follow user choices for mod_paths that had conflicts
+            merged_config: Dict[str, Any] = {}
+            all_mod_paths = set(pack_config_data.keys()) | set(existing_config_data.keys())
+
+            for mod_path in all_mod_paths:
+                choice = user_choices.get(mod_path)
+                if choice == "pack":
+                    # User chose to use imported outfit -> use pack config
+                    if mod_path in pack_config_data:
+                        merged_config[mod_path] = copy.deepcopy(pack_config_data[mod_path])
+                elif choice == "existing":
+                    # User chose to keep existing outfit -> use existing config
+                    if mod_path in existing_config_data:
+                        merged_config[mod_path] = copy.deepcopy(existing_config_data[mod_path])
+                else:
+                    # No conflict for this mod_path - take whichever exists
+                    if mod_path in pack_config_data:
+                        merged_config[mod_path] = copy.deepcopy(pack_config_data[mod_path])
+                    elif mod_path in existing_config_data:
+                        merged_config[mod_path] = copy.deepcopy(existing_config_data[mod_path])
+
+            if merged_config:
+                os.makedirs(dst_config_dir, exist_ok=True)
+                with open(dst_config_path, "w", encoding="utf-8") as f:
+                    json.dump(merged_config, f, indent=4, ensure_ascii=False)
 
     # ---------- import version helper ----------
 
