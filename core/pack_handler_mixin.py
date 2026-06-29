@@ -1545,8 +1545,6 @@ class PackHandlerMixin:
         for cid in selected_ids:
             effective_cid = get_effective_cid(cid)
             src_config_path = os.path.join(temp_dir, "outfit_config", f"{cid}.json")
-            if not os.path.exists(src_config_path):
-                continue
 
             dst_config_dir = os.path.join(root_dir, "outfit_config")
             dst_config_path = os.path.join(dst_config_dir, f"{effective_cid}.json")
@@ -1554,10 +1552,22 @@ class PackHandlerMixin:
             # --- Overwrite or new character: direct copy ---
             if cid in outfit_overwrite_ids or cid in new_ids:
                 os.makedirs(dst_config_dir, exist_ok=True)
-                shutil.copy2(src_config_path, dst_config_path)
+                if os.path.exists(src_config_path):
+                    shutil.copy2(src_config_path, dst_config_path)
+                else:
+                    # 覆盖/新角色模式下，若 pack 不含该角色的
+                    # outfit_config，删除目标处可能残留的旧配置文件，
+                    # 避免其指向已被删除的 original/exported_outfit 数据。
+                    if os.path.exists(dst_config_path):
+                        try:
+                            os.remove(dst_config_path)
+                        except OSError:
+                            pass
                 continue
 
             # --- Merge character: follow user outfit file choices ---
+            if not os.path.exists(src_config_path):
+                continue
             if cid not in outfit_merge_ids:
                 continue
 
