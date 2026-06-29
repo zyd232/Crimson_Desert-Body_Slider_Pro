@@ -559,7 +559,9 @@ class OutfitManager:
                     sub_path = os.path.join(entry_path, sub_entry)
                     if not os.path.isdir(sub_path):
                         continue
-                    short_id = sub_entry
+                    # Include "custom/" prefix so the short_id matches the slider_segment
+                    # format used in MOD export (e.g. "custom/cd_phw_00_nude_00_0001_damian")
+                    short_id = f"custom/{sub_entry}"
                     slider_dir = sub_path
                     candidates = [
                         os.path.join(slider_dir, mod_dir, pac_base),
@@ -633,6 +635,15 @@ class OutfitManager:
                 key = f"outfit_{fid_short_id}"
                 if key in discovered:
                     result[key] = discovered[key]
+                    continue
+                # For custom sliders: full_sid uses "." but discovered key uses "/"
+                # e.g. full_sid="slider.custom.cd_phw_00_nude_00_0001_damian"
+                #      fid_short_id="custom.cd_phw_00_nude_00_0001_damian"
+                #      discovered key="outfit_custom/cd_phw_00_nude_00_0001_damian"
+                if fid_short_id.startswith("custom."):
+                    custom_key = f"outfit_{fid_short_id.replace('.', '/', 1)}"
+                    if custom_key in discovered:
+                        result[custom_key] = discovered[custom_key]
 
         # Append any discovered sliders not matched to character sliders
         for key, info in discovered.items():
@@ -650,19 +661,19 @@ class OutfitManager:
         Find the character slider full_id that corresponds to the outfit slider.
 
         For default sliders: match by short_id part of full_id (e.g. "breast_size_type_01")
-        For custom sliders: match by path containing "custom/{short_id}"
-            (e.g. target_mesh/{char_id}/custom/{short_id}.obj)
+        For custom sliders: match by path containing "custom/{base_name}"
+            (e.g. target_mesh/{char_id}/custom/{base_name}.obj)
+            short_id for custom now includes "custom/" prefix (e.g. "custom/cd_phw_00_nude_00_0001_damian")
 
         Returns the full_id if found, None otherwise.
         """
         for full_id, info in sliders_info.items():
             if is_custom:
-                # Custom slider: match by path containing "custom/{short_id}"
+                # Custom slider: short_id includes "custom/" prefix.
+                # Match by checking if the slider path contains the short_id.
                 path = info.get("path", "")
-                # Normalize path separators
                 normalized = path.replace("\\", "/")
-                # Check if path contains "custom/{short_id}"
-                if f"custom/{short_id}" in normalized:
+                if short_id in normalized:
                     return full_id
             else:
                 # Default slider: match by short_id part of full_id

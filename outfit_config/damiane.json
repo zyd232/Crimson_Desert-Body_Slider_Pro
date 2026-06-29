@@ -4,8 +4,15 @@
             "name": "Breast Size (Type 1)",
             "min": 0.0,
             "max": 100.0,
-            "current_value": 78.86,
-            "is_linked": true
+            "current_value": 50.0,
+            "is_linked": false
+        },
+        "custom/cd_phw_00_nude_00_0001_damian": {
+            "name": "Thicc",
+            "min": -50.0,
+            "max": 150.0,
+            "current_value": 150.0,
+            "is_linked": false
         }
     }
 }

@@ -731,6 +731,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         self.outfit_mgr.activate_outfit(original_path, mod_path)
         # Load outfit sliders for the activated outfit
         self._load_outfit_sliders(mod_path)
+        # Re-render outfit mesh with correct link/unlink slider values
+        # (activate_outfit uses sliders_info directly without link/unlink awareness)
+        self.outfit_mgr.update_outfit_morphs()
 
     def _load_outfit_sliders(self, mod_path: str):
         """
@@ -1799,7 +1802,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
 
         def __init__(self, char_id: str, original_pac: str, mod_path: str,
                      mod_dir: str, files_dir: str, char_name: str,
-                     sliders_info: Dict[str, Dict], root_dir: str):
+                     sliders_info: Dict[str, Dict], root_dir: str,
+                     outfit_config_all: Dict[str, Dict[str, Any]] = None):
             super().__init__()
             self.char_id = char_id
             self.original_pac = original_pac
@@ -1809,6 +1813,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             self.char_name = char_name
             self.sliders_info = sliders_info
             self.root_dir = root_dir
+            # Full outfit config JSON data: {mod_path: {short_id: slider_info}}
+            # Each outfit's slider values are looked up per-outfit during export.
+            self.outfit_config_all = outfit_config_all or {}
             self._cancelled = False
             self._executor = None
             # Pre-computed target mesh cache: {target_file_path: {submesh_name: vertices_array}}
@@ -2060,6 +2067,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                         count_lock = threading.Lock()
 
                         def export_single_outfit(outfit_pac_path: str) -> str:
+                            import logging as _logging
+                            _logger = _logging.getLogger("BodySlider")
                             rel_path = os.path.relpath(outfit_pac_path, original_outfit_root)
                             outfit_pac_dir = os.path.dirname(rel_path)
                             ofn = os.path.basename(outfit_pac_path)
@@ -2164,10 +2173,74 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                                 shutil.copy2(outfit_pac_path, os.path.join(dest_dir, ofn))
                                 return ofn
 
+                            # Build effective sliders_info respecting link/unlink state
+                            # Use per-outfit config from outfit_config JSON (not global state)
+                            effective_info: Dict[str, Dict[str, Any]] = dict(self.sliders_info)
+
+                            # Look up this outfit's specific slider config from JSON.
+                            # rel_path uses '/' separator but JSON keys may use '\\'.
+                            # Try both formats to find a match.
+                            outfit_sliders_data: Dict[str, Any] = {}
+                            if self.outfit_config_all:
+                                outfit_sliders_data = self.outfit_config_all.get(rel_path, {}) or {}
+                                if not outfit_sliders_data:
+                                    # Try with backslash separator
+                                    alt_path = rel_path.replace("/", "\\")
+                                    outfit_sliders_data = self.outfit_config_all.get(alt_path, {}) or {}
+
+                            # DIAG: Log config lookup result
+                            _logger = _logging.getLogger("BodySlider")
+                            _logger.info(f"[DIAG] export_single_outfit: {ofn}")
+                            _logger.info(f"[DIAG]   rel_path={rel_path}")
+                            _logger.info(f"[DIAG]   JSON keys={list(self.outfit_config_all.keys())}")
+                            _logger.info(f"[DIAG]   found_config={bool(outfit_sliders_data)}")
+                            if outfit_sliders_data:
+                                for _sid, _sd in outfit_sliders_data.items():
+                                    _logger.info(f"[DIAG]     slider {_sid}: is_linked={_sd.get('is_linked')}, current_value={_sd.get('current_value')}")
+
+                            if outfit_sliders_data:
+                                # Build short_id -> char_slider_id mapping
+                                # slider_segment matches JSON short_id format:
+                                #   Default: "breast_size_type_01"
+                                #   Custom:  "custom/cd_phw_00_nude_00_0001_damian"
+                                short_id_to_char_sid: Dict[str, str] = {}
+                                for sid, info in self.sliders_info.items():
+                                    path = info.get("path", "")
+                                    normalized = path.replace("\\", "/")
+                                    tm_idx = normalized.find("target_mesh/")
+                                    if tm_idx >= 0:
+                                        normalized = normalized[tm_idx + len("target_mesh/"):]
+                                    parts = normalized.split("/", 1)
+                                    after_char_id = parts[1] if len(parts) > 1 else normalized
+                                    slider_segment = os.path.splitext(after_char_id)[0]
+                                    short_id_to_char_sid[slider_segment] = sid
+
+                                for short_id, slider_data in outfit_sliders_data.items():
+                                    if not isinstance(slider_data, dict):
+                                        continue
+                                    is_linked = slider_data.get("is_linked", True)
+                                    if not is_linked:
+                                        # Unlinked slider: use the outfit's own current_value
+                                        char_sid = short_id_to_char_sid.get(short_id)
+                                        if not char_sid:
+                                            # Backward compat: try with "custom/" prefix
+                                            # (old JSON may store just "cd_phw_..." without prefix)
+                                            char_sid = short_id_to_char_sid.get(f"custom/{short_id}")
+                                        if char_sid and char_sid in effective_info:
+                                            val = slider_data.get("current_value", 0.0)
+                                            entry = dict(effective_info[char_sid])
+                                            entry["current_value"] = val
+                                            effective_info[char_sid] = entry
+
+                            # DIAG: Log effective slider values used
+                            for _sid, _info in effective_info.items():
+                                if _sid in outfit_morph_data:
+                                    _logger.info(f"[DIAG]   effective slider {_sid} -> current_value={_info.get('current_value')}")
+
                             new_outfit_positions: Dict[str, _np.ndarray] = {}
                             for name, orig in outfit_original_points.items():
                                 morphed = orig.copy()
-                                for sid, info in self.sliders_info.items():
+                                for sid, info in effective_info.items():
                                     md = outfit_morph_data.get(sid)
                                     cv = info.get("current_value", 0.0)
                                     if md is not None and name in md:
@@ -2267,6 +2340,64 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
 
             self.finished.emit(self.mod_dir, error_msg)
 
+    # ---------- outfit state sync helper ----------
+
+    def _sync_outfit_state_from_json(self) -> None:
+        """
+        Sync outfit link/unlink state from outfit_config JSON to memory.
+
+        All outfit sliders default to linked. Only when JSON has explicit record
+        with is_linked=false, the slider is treated as unlinked.
+
+        Note: MOD export no longer uses this method. Each outfit reads its own
+        slider values directly from the outfit_config JSON during export.
+        This method is kept for backward compatibility with the UI.
+        """
+        char_id = self.active_char_id
+        if not char_id:
+            return
+
+        ocm = getattr(self, "outfit_config_mgr", None)
+        if not ocm:
+            return
+
+        # Get all outfit configs for this character
+        all_config = ocm.get_all_for_char(char_id)
+        if not all_config:
+            return
+
+        # Build short_id -> char_slider_id mapping from sliders_info
+        short_id_to_char_sid: Dict[str, str] = {}
+        for sid, info in self.sliders_info.items():
+            path = info.get("path", "")
+            normalized = path.replace("\\", "/")
+            tm_idx = normalized.find("target_mesh/")
+            if tm_idx >= 0:
+                normalized = normalized[tm_idx + len("target_mesh/"):]
+            parts = normalized.split("/", 1)
+            after_char_id = parts[1] if len(parts) > 1 else normalized
+            slider_segment = os.path.splitext(after_char_id)[0]
+            short_id_to_char_sid[slider_segment] = sid
+
+        # For each outfit mod_path in JSON, check for unlinked sliders
+        for mod_path, sliders_data in all_config.items():
+            if not isinstance(sliders_data, dict):
+                continue
+            for short_id, slider_data in sliders_data.items():
+                if not isinstance(slider_data, dict):
+                    continue
+                outfit_key = f"outfit_{short_id}"
+                is_linked = slider_data.get("is_linked", True)
+                if not is_linked:
+                    # Explicitly unlinked - use JSON value
+                    self.outfit_link_states[outfit_key] = False
+                    self.outfit_slider_values[outfit_key] = slider_data.get("current_value", 0.0)
+                    char_sid = short_id_to_char_sid.get(short_id)
+                    if not char_sid:
+                        # Backward compat: old JSON stored custom slider short_id without prefix
+                        char_sid = short_id_to_char_sid.get(f"custom/{short_id}")
+                    self.outfit_slider_mapping[outfit_key] = char_sid
+
     # ---------- package and export as MOD folder (async with progress dialog) ----------
 
     def package_and_export_mod(self):
@@ -2353,6 +2484,12 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         QApplication.processEvents()
 
         # Create and start background worker
+        # Pass full outfit config JSON so each outfit can look up its own slider values
+        outfit_config_all = {}
+        ocm = getattr(self, "outfit_config_mgr", None)
+        if ocm:
+            outfit_config_all = ocm.get_all_for_char(char_id)
+
         worker_obj = self.ModExportWorker(
             char_id=char_id,
             original_pac=original_pac,
@@ -2362,6 +2499,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             char_name=char_name,
             sliders_info=self.sliders_info,
             root_dir=self.root_dir,
+            outfit_config_all=outfit_config_all,
         )
 
         worker_thread = QThread()
@@ -2703,11 +2841,56 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                 shutil.copy2(outfit_pac_path, os.path.join(dest_dir, pac_filename))
                 continue
 
+            # Build effective sliders_info respecting per-outfit link/unlink state
+            outfit_config_all = {}
+            ocm = getattr(self, "outfit_config_mgr", None)
+            if ocm:
+                outfit_config_all = ocm.get_all_for_char(char_id)
+
+            effective_info: Dict[str, Dict[str, Any]] = dict(self.sliders_info)
+            outfit_sliders_data: Dict[str, Any] = {}
+            if outfit_config_all:
+                outfit_sliders_data = outfit_config_all.get(rel_path, {}) or {}
+                if not outfit_sliders_data:
+                    alt_path = rel_path.replace("/", "\\")
+                    outfit_sliders_data = outfit_config_all.get(alt_path, {}) or {}
+
+            if outfit_sliders_data:
+                # Build short_id -> char_slider_id mapping
+                # slider_segment matches JSON short_id format:
+                #   Default: "breast_size_type_01"
+                #   Custom:  "custom/cd_phw_00_nude_00_0001_damian"
+                short_id_to_char_sid: Dict[str, str] = {}
+                for sid, info in self.sliders_info.items():
+                    path = info.get("path", "")
+                    normalized = path.replace("\\", "/")
+                    tm_idx = normalized.find("target_mesh/")
+                    if tm_idx >= 0:
+                        normalized = normalized[tm_idx + len("target_mesh/"):]
+                    parts = normalized.split("/", 1)
+                    after_char_id = parts[1] if len(parts) > 1 else normalized
+                    slider_segment = os.path.splitext(after_char_id)[0]
+                    short_id_to_char_sid[slider_segment] = sid
+
+                for short_id, slider_data in outfit_sliders_data.items():
+                    if not isinstance(slider_data, dict):
+                        continue
+                    is_linked = slider_data.get("is_linked", True)
+                    if not is_linked:
+                        char_sid = short_id_to_char_sid.get(short_id)
+                        if not char_sid:
+                            char_sid = short_id_to_char_sid.get(f"custom/{short_id}")
+                        if char_sid and char_sid in effective_info:
+                            val = slider_data.get("current_value", 0.0)
+                            entry = dict(effective_info[char_sid])
+                            entry["current_value"] = val
+                            effective_info[char_sid] = entry
+
             # Compute morphed vertex positions
             new_positions: Dict[str, np.ndarray] = {}
             for name, orig in outfit_original_points.items():
                 morphed = orig.copy()
-                for sid, info in self.sliders_info.items():
+                for sid, info in effective_info.items():
                     md = outfit_morph_data.get(sid)
                     cv = info.get("current_value", 0.0)
                     if md is not None and name in md:

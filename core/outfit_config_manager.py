@@ -106,6 +106,21 @@ class OutfitConfigManager:
         """
         self._write_file(char_id, data)
 
+    def delete_slider(
+        self, char_id: str, outfit_mod_path: str, short_id: str
+    ) -> None:
+        """
+        Delete a single slider's config from outfit_config JSON.
+        Called when switching from unlinked to linked (linked state has no JSON record).
+        """
+        data = self._read_file(char_id)
+        if outfit_mod_path in data:
+            data[outfit_mod_path].pop(short_id, None)
+            # Clean up empty mod_path entries
+            if not data[outfit_mod_path]:
+                del data[outfit_mod_path]
+            self._write_file(char_id, data)
+
     def delete_config(self, char_id: str) -> None:
         """
         Delete the outfit config file for a character.
