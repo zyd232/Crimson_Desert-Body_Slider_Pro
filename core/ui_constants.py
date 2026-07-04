@@ -1138,9 +1138,8 @@ QPushButton#btn_dialog_secondary {{
     padding: 0 8px;
     background-color: {COLOR_BG_ELEVATED};
     font-size: 12px;
-    height: 28px;
-    min-height: 28px;
-    max-height: 28px;
+    height: 32px;
+    min-height: 32px;
 }}
 QPushButton#btn_dialog_secondary:hover {{
     background-color: {COLOR_BG_HOVER_SOFT};

@@ -150,6 +150,9 @@ class OutfitFileTree(QWidget):
         self._btn_refresh.clicked.connect(self.refresh_async)
 
         # Select All button - uses "☑" (U+2611, Ballot Box with Check)
+        # [HIDDEN] Checkbox feature temporarily disabled — to re-enable:
+        #   1. Uncomment setVisible below
+        #   2. Uncomment the 8 ItemIsUserCheckable / CheckStateRole lines throughout this file
         self._btn_select_all = QPushButton("\u2611")
         self._btn_select_all.setObjectName("btn_select_all")
         self._btn_select_all.setStyleSheet(BTN_SELECT_ALL_STYLE)
@@ -157,6 +160,7 @@ class OutfitFileTree(QWidget):
         self._btn_select_all.setFixedSize(18, 18)
         self._btn_select_all.setToolTip(self._tr("tooltip_tree_select_all", "Select All"))
         self._btn_select_all.clicked.connect(self.select_all)
+        self._btn_select_all.setVisible(False)  # [HIDDEN] Re-enable checkbox feature
 
         # Deselect All button - uses "☐" (U+2610, Ballot Box)
         self._btn_deselect_all = QPushButton("\u2610")
@@ -166,6 +170,7 @@ class OutfitFileTree(QWidget):
         self._btn_deselect_all.setFixedSize(18, 18)
         self._btn_deselect_all.setToolTip(self._tr("tooltip_tree_deselect_all", "Deselect All"))
         self._btn_deselect_all.clicked.connect(self.deselect_all)
+        self._btn_deselect_all.setVisible(False)  # [HIDDEN] Re-enable checkbox feature
 
         toolbar.addWidget(self._btn_expand_all)
         toolbar.addWidget(self._btn_collapse_all)
@@ -439,8 +444,9 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem(self._tree, [display_text])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": entry_type, "path": full_path})
             item.setIcon(0, icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
 
             self._path_to_item[full_path] = item
 
@@ -549,13 +555,13 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem(parent_item, [display_text])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": entry_type, "path": full_path})
             item.setIcon(0, icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            
-            # 继承父目录的勾选状态
-            if parent_check == Qt.CheckState.Checked:
-                item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Checked)
-            else:
-                item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # # 继承父目录的勾选状态
+            # if parent_check == Qt.CheckState.Checked:
+            #     item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Checked)
+            # else:
+            #     item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
 
             self._path_to_item[full_path] = item
 
@@ -665,8 +671,9 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem(self._tree, [display_text])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": entry_type, "path": full_path})
             item.setIcon(0, icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
 
             self._path_to_item[full_path] = item
 
@@ -777,8 +784,9 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem([display_text])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": entry_type, "path": full_path})
             item.setIcon(0, icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
 
             self._path_to_item[full_path] = item
 
@@ -1145,8 +1153,9 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem(self._tree, ["📁 " + entry])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": "dir", "path": full_path})
             item.setIcon(0, folder_icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
             self._populate_dir(full_path, item, folder_icon, file_icon)
 
         for entry in sorted(files):
@@ -1154,8 +1163,9 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem(self._tree, ["📄 " + entry])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": full_path})
             item.setIcon(0, file_icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
 
     def _populate_dir(self, dir_path: str, parent_item: QTreeWidgetItem,
                       folder_icon, file_icon):
@@ -1178,8 +1188,9 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem(parent_item, ["📁 " + entry])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": "dir", "path": full_path})
             item.setIcon(0, folder_icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
             self._populate_dir(full_path, item, folder_icon, file_icon)
 
         for entry in sorted(files):
@@ -1187,8 +1198,9 @@ class OutfitFileTree(QWidget):
             item = QTreeWidgetItem(parent_item, ["📄 " + entry])
             item.setData(0, Qt.ItemDataRole.UserRole, {"type": "file", "path": full_path})
             item.setIcon(0, file_icon)
-            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-            item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
+            # [HIDDEN] Checkbox temporarily disabled — uncomment to re-enable:
+            # item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            # item.setData(0, Qt.ItemDataRole.CheckStateRole, Qt.CheckState.Unchecked)
 
     # ------------ icon helpers ------------
 
