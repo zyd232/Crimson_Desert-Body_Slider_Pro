@@ -31,6 +31,7 @@ from core.ui_constants import (
     OUTFIT_PANEL_MIN_WIDTH,
     OUTFIT_PANEL_MAX_WIDTH,
     OUTFIT_PANEL_BOTTOM_MARGIN,
+    OUTFIT_SCROLL_STYLE,
     OUTFIT_SLIDERS_PANEL_MIN_WIDTH,
     OUTFIT_SLIDERS_PANEL_MAX_WIDTH,
 )
@@ -226,6 +227,7 @@ class _OutfitSingleSlidersPanel(QWidget):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet(OUTFIT_SCROLL_STYLE)
         scroll_content = QWidget()
         scroll_layout = QVBoxLayout(scroll_content)
         scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -251,7 +253,7 @@ class OutfitSlidersPanel(QWidget):
         outfitSliderValueChanged(outfit_key: str, value: float, char_slider_id: str or None)
             Emitted when an outfit slider's value changes.
         outfitAddSliderRequested()
-            Emitted when the "+ Add Outfit Slider" button is clicked.
+            Emitted when the "+ Add Outfit Custom Slider" button is clicked.
         outfitExportObjRequested()
             Emitted when the "Export Outfit Model (.obj)" button is clicked.
     """

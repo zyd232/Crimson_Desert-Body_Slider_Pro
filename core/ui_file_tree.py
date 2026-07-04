@@ -35,6 +35,8 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QEvent, QRect
 from PyQt6.QtGui import QFont
 
+from core.ui_constants import SCROLL_BAR_STYLE
+
 
 class OutfitFileTree(QWidget):
     """
@@ -229,25 +231,7 @@ class OutfitFileTree(QWidget):
             QCheckBox::indicator:unchecked:hover {
                 border-color: #c56d43;
             }
-            QScrollBar:vertical {
-                background-color: #1b130f;
-                width: 8px;
-                border: none;
-                border-radius: 4px;
-            }
-            QScrollBar::handle:vertical {
-                background-color: #6b4932;
-                border-radius: 4px;
-                min-height: 20px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background-color: #c56d43;
-            }
-            QScrollBar::add-line:vertical,
-            QScrollBar::sub-line:vertical {
-                height: 0px;
-            }
-        """)
+        """ + SCROLL_BAR_STYLE)
 
         self._tree.itemChanged.connect(self._on_item_changed)
         self._tree.itemSelectionChanged.connect(self._on_item_selection_changed)

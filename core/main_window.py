@@ -591,13 +591,13 @@ class MainWindowUIMixin:
             outfit_h_splitter.setStretchFactor(1, 1)
             outfit_sliders_container_layout.addWidget(outfit_h_splitter, stretch=1)
 
-            # Button row: + Add Outfit Slider | Export Outfit Model (.obj)
+            # Button row: + Add Outfit Custom Slider | Export Outfit Model (.obj)
             outfit_btns_row = QHBoxLayout()
             outfit_btns_row.setSpacing(BTN_EXPORT_ROW_SPACING)
             outfit_btns_row.setContentsMargins(*BTN_EXPORT_ROW_MARGINS)
 
             outfit_btn_add = SmoothHoverButton(
-                self.T.get("btn_outfit_add_slider", "+ Add Outfit Slider")
+                self.T.get("btn_outfit_add_slider", "+ Add Outfit Custom Slider")
             )
             outfit_btn_add.setObjectName("btn_base_primary")
             outfit_btn_add.setEnabled(False)

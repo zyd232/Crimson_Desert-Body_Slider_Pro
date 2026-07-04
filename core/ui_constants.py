@@ -496,22 +496,83 @@ WARNING_LABEL_SMALL_STYLE = f"""
 
 CHAR_LABEL_STYLE = f"font-weight: bold; font-size: 14px; color: {COLOR_TEXT_BRIGHT};"
 
-# -- Tab scroll area --
+# -- Unified ScrollBar style fragment (vertical + horizontal) --
+# Used across all scroll areas in the application for consistent appearance.
+# - Background: COLOR_BG_INPUT (dark)
+# - Handle default: COLOR_BORDER_ACCENT (subtle sepia)
+# - Handle hover: COLOR_ACCENT (orange accent)
+# - Size: 8px width/height, 4px border-radius
+# - No arrow buttons (add-line/sub-line hidden)
 
-TAB_SCROLL_STYLE = f"""
-    QScrollArea {{ background: transparent; border: none; }}
-    QScrollArea QWidget {{ background: transparent; }}
-    QScrollBar:horizontal {{ height: 6px; background: {COLOR_BG_INPUT}; margin: 0px; spacing: 0px; }}
-    QScrollBar::handle:horizontal {{ background: {COLOR_ACCENT}; border-radius: 3px; min-width: 16px; }}
+SCROLL_BAR_STYLE = f"""
+    QScrollBar:vertical {{
+        background-color: {COLOR_BG_INPUT};
+        width: 8px;
+        border: none;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:vertical {{
+        background-color: {COLOR_BORDER_ACCENT};
+        border-radius: 4px;
+        min-height: 20px;
+    }}
+    QScrollBar::handle:vertical:hover {{
+        background-color: {COLOR_ACCENT};
+    }}
+    QScrollBar::add-line:vertical,
+    QScrollBar::sub-line:vertical {{
+        height: 0px;
+    }}
+    QScrollBar:horizontal {{
+        background-color: {COLOR_BG_INPUT};
+        height: 8px;
+        border: none;
+        border-radius: 4px;
+    }}
+    QScrollBar::handle:horizontal {{
+        background-color: {COLOR_BORDER_ACCENT};
+        border-radius: 4px;
+        min-width: 20px;
+    }}
+    QScrollBar::handle:horizontal:hover {{
+        background-color: {COLOR_ACCENT};
+    }}
+    QScrollBar::add-line:horizontal,
+    QScrollBar::sub-line:horizontal {{
+        width: 0px;
+    }}
 """
 
-# -- Outfits panel width constants --
+# -- Scroll area with transparent background (Outfits panel, Tab scroll) --
+
+TRANSPARENT_SCROLL_STYLE = (
+    f"QScrollArea {{ background: transparent; border: none; }}"
+    f"QScrollArea QWidget {{ background: transparent; }}"
+    + SCROLL_BAR_STYLE
+)
+
+# -- Scroll area with bordered background (Sort dialog, etc.) --
+
+BORDERED_SCROLL_STYLE = (
+    f"QScrollArea {{ background: {COLOR_BG_INPUT}; border: 1px solid {COLOR_BORDER}; border-radius: 4px; }}"
+    + SCROLL_BAR_STYLE
+)
+
+# -- Legacy aliases for backward compatibility --
+
+# Tab scroll area
+TAB_SCROLL_STYLE = TRANSPARENT_SCROLL_STYLE
+
+# Outfits panel width constants
 OUTFIT_PANEL_MIN_WIDTH = 180
 OUTFIT_PANEL_MAX_WIDTH = 400
 
-# -- Outfit Sliders panel width constants --
+# Outfit Sliders panel width constants
 OUTFIT_SLIDERS_PANEL_MIN_WIDTH = 200
 OUTFIT_SLIDERS_PANEL_MAX_WIDTH = 420
+
+# Outfits panel scroll style
+OUTFIT_SCROLL_STYLE = TRANSPARENT_SCROLL_STYLE
 
 # -- File tree toolbar button styles --
 
@@ -635,13 +696,8 @@ OUTFIT_PANEL_BOTTOM_MARGIN = 8
 OUTFIT_SLIDERS_BTN_ROW_MARGINS = (0, 4, 0, 8)  # (left, top, right, bottom)
 OUTFIT_SLIDERS_BTN_ROW_SPACING = 6
 
-# -- Sort dialog scroll area --
-
-SORT_SCROLL_STYLE = f"""
-    QScrollArea {{ background: {COLOR_BG_INPUT}; border: 1px solid {COLOR_BORDER}; border-radius: 4px; }}
-    QScrollBar:vertical {{ background: {COLOR_BG_INPUT}; width: 8px; border-radius: 4px; border: none; }}
-    QScrollBar::handle:vertical {{ background: {COLOR_ACCENT}; border-radius: 4px; min-height: 16px; }}
-"""
+# -- Sort dialog scroll area (uses bordered scroll style defined above) --
+SORT_SCROLL_STYLE = BORDERED_SCROLL_STYLE
 
 # -- Sort dialog content --
 
@@ -791,12 +847,7 @@ PACK_ERROR_LABEL_STYLE = f"color: {COLOR_ERROR}; font-size: 12px;"
 PACK_DIALOG_INFO_LABEL_STYLE = f"QLabel {{ color: {COLOR_TEXT_DIM}; font-size: 12px; }}"
 
 # -- Scroll area (uniform across all pack dialogs) --
-
-PACK_DIALOG_SCROLL_STYLE = (
-    f"QScrollArea {{ background: transparent; border: none; }}"
-    f"QScrollBar:vertical {{ background: {COLOR_BG_INPUT}; width: 8px; border-radius: 4px; border: none; }}"
-    f"QScrollBar::handle:vertical {{ background: {COLOR_ACCENT}; border-radius: 4px; min-height: 16px; }}"
-)
+PACK_DIALOG_SCROLL_STYLE = TRANSPARENT_SCROLL_STYLE
 
 # -- "Already exists" tag (grey, small badge) --
 
@@ -1219,35 +1270,38 @@ QSlider::handle:horizontal {{
 }}
 QSlider::handle:horizontal:hover {{ background: {COLOR_ACCENT_HOT}; }}
 
-/* ScrollBar vertical */
+/* ScrollBar - unified style (vertical + horizontal) */
 QScrollBar:vertical {{
-    background: {COLOR_BG_INPUT};
-    width: 10px;
-    border-radius: 5px;
-    border: 1px solid {COLOR_BORDER};
+    background-color: {COLOR_BG_INPUT};
+    width: 8px;
+    border: none;
+    border-radius: 4px;
 }}
 QScrollBar::handle:vertical {{
-    background: {COLOR_ACCENT};
-    border-radius: 5px;
+    background-color: {COLOR_BORDER_ACCENT};
+    border-radius: 4px;
     min-height: 20px;
 }}
-QScrollBar::handle:vertical:hover {{ background: {COLOR_ACCENT_HOT}; }}
+QScrollBar::handle:vertical:hover {{
+    background-color: {COLOR_ACCENT};
+}}
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
 
-/* ScrollBar horizontal */
 QScrollBar:horizontal {{
-    background: {COLOR_BG_INPUT};
-    height: 10px;
-    border-radius: 5px;
-    border: 1px solid {COLOR_BORDER};
+    background-color: {COLOR_BG_INPUT};
+    height: 8px;
+    border: none;
+    border-radius: 4px;
 }}
 QScrollBar::handle:horizontal {{
-    background: {COLOR_ACCENT};
-    border-radius: 5px;
+    background-color: {COLOR_BORDER_ACCENT};
+    border-radius: 4px;
     min-width: 20px;
 }}
-QScrollBar::handle:horizontal:hover {{ background: {COLOR_ACCENT_HOT}; }}
+QScrollBar::handle:horizontal:hover {{
+    background-color: {COLOR_ACCENT};
+}}
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
 QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{ background: none; }}
 
@@ -1291,15 +1345,18 @@ QScrollArea#PackDialogScrollArea {{
     border-radius: 4px;
 }}
 QScrollArea#PackDialogScrollArea QScrollBar:vertical {{
-    background: {COLOR_BG_INPUT};
+    background-color: {COLOR_BG_INPUT};
     width: 8px;
     border-radius: 4px;
     border: none;
 }}
 QScrollArea#PackDialogScrollArea QScrollBar::handle:vertical {{
-    background: {COLOR_ACCENT};
+    background-color: {COLOR_BORDER_ACCENT};
     border-radius: 4px;
-    min-height: 16px;
+    min-height: 20px;
+}}
+QScrollArea#PackDialogScrollArea QScrollBar::handle:vertical:hover {{
+    background-color: {COLOR_ACCENT};
 }}
 
 QCheckBox#PackDialogCheckBox {{

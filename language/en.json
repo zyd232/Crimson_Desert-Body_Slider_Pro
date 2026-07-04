@@ -242,7 +242,7 @@
   "group_outfit_default": "Outfit Default Sliders",
   "group_outfit_custom": "Outfit Custom Sliders",
   "no_outfit_sliders": "No outfit sliders available.",
-  "btn_outfit_add_slider": "+ Add Outfit Slider",
+  "btn_outfit_add_slider": "+ Add Outfit Custom Slider",
   "btn_outfit_export_obj": "Export Outfit Model (.obj)",
   "tooltip_outfit_link_linked": "Click to unlink — value synced with character slider",
   "tooltip_outfit_link_unlinked": "Click to link — value will sync to character slider value",

@@ -70,6 +70,7 @@ from core.ui_constants import (
     SORT_ROW_WIDGET_STYLE,
     SORT_ROW_NAME_LABEL_STYLE,
     SORT_ROW_ID_LABEL_STYLE,
+    BORDERED_SCROLL_STYLE,
     COLOR_ACCENT_HOT,
     COLOR_ACCENT_LIGHT,
     PACK_RADIO_INDICATOR_SIZE,
@@ -1276,11 +1277,7 @@ class CharacterSortDialog(DialogBase):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll.setStyleSheet(
-            "QScrollArea { background: #1b130f; border: 1px solid #513929; border-radius: 4px; } "
-            "QScrollBar:vertical { background: #1b130f; width: 8px; border-radius: 4px; border: none; } "
-            "QScrollBar::handle:vertical { background: #c56d43; border-radius: 4px; min-height: 16px; }"
-        )
+        scroll.setStyleSheet(BORDERED_SCROLL_STYLE)
 
         scroll_widget = QWidget()
         scroll_widget.setStyleSheet("QWidget { background: transparent; }")
