@@ -163,6 +163,12 @@ T = {
     "group_outfit_default": "Outfit Default Sliders",
     "group_outfit_custom": "Outfit Custom Sliders",
     "no_outfit_sliders": "No outfit sliders available.",
+    "dlg_add_outfit_slider_title": "Add Outfit Custom Slider",
+    "dlg_edit_outfit_slider_title": "Edit Outfit Custom Slider",
+    "dlg_add_outfit_slider_select_title": "Select Target Mesh for Outfit Slider",
+    "outfit_add_need_active": "Please activate an outfit first.",
+    "outfit_custom_del_title": "Delete Outfit Custom Slider",
+    "outfit_custom_del_msg": "Delete outfit custom slider \"{name}\"?\nThis removes its deployed mesh, morph data, and config record.",
 
     # File tree toolbar tooltips
     "tooltip_tree_expand_all": "Expand All",
@@ -570,9 +576,6 @@ OUTFIT_PANEL_MAX_WIDTH = 400
 # Outfit Sliders panel width constants
 OUTFIT_SLIDERS_PANEL_MIN_WIDTH = 200
 OUTFIT_SLIDERS_PANEL_MAX_WIDTH = 420
-
-# Outfits panel scroll style
-OUTFIT_SCROLL_STYLE = TRANSPARENT_SCROLL_STYLE
 
 # -- File tree toolbar button styles --
 

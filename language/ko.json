@@ -246,6 +246,12 @@
   "btn_outfit_export_obj": "의상 모델 내보내기 (.obj)",
   "tooltip_outfit_link_linked": "클릭하여 연결 해제 — 값이 캐릭터 슬라이더와 동기화됨",
   "tooltip_outfit_link_unlinked": "클릭하여 연결 — 값이 캐릭터 슬라이더 값으로 동기화됩니다",
+  "dlg_add_outfit_slider_title": "의상 커스텀 슬라이더 추가",
+  "dlg_edit_outfit_slider_title": "의상 커스텀 슬라이더 편집",
+  "dlg_add_outfit_slider_select_title": "의상 슬라이더용 타겟 메쉬 선택",
+  "outfit_add_need_active": "먼저 의상을 활성화해 주세요.",
+  "outfit_custom_del_title": "의상 커스텀 슬라이더 삭제",
+  "outfit_custom_del_msg": "의상 커스텀 슬라이더 \"{name}\"을(를) 삭제하시겠습니까?\n배포된 메쉬, 모프 데이터 및 구성 레코드가 제거됩니다.",
   "loading_ellipsis": "로딩 중...",
 
   "outfit_submesh_mismatch_title": "의상 서브메시 불일치 경고",

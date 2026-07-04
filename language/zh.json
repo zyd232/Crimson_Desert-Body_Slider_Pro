@@ -275,6 +275,12 @@
   "btn_outfit_export_obj": "导出服装模型 (.obj)",
   "tooltip_outfit_link_linked": "点击断开 — 当前数值与角色滑块同步",
   "tooltip_outfit_link_unlinked": "点击链接 — 数值将同步至角色滑块",
+  "dlg_add_outfit_slider_title": "添加服装自定义滑块",
+  "dlg_edit_outfit_slider_title": "编辑服装自定义滑块",
+  "dlg_add_outfit_slider_select_title": "为服装滑块选择目标网格",
+  "outfit_add_need_active": "请先激活一个服装。",
+  "outfit_custom_del_title": "删除服装自定义滑块",
+  "outfit_custom_del_msg": "确定删除服装自定义滑块「{name}」吗？\n该操作将移除其部署的网格文件、变形数据及配置记录。",
   "loading_ellipsis": "加载中...",
 
   "outfit_submesh_mismatch_title": "服装子网格不匹配警告",

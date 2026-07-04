@@ -11,7 +11,7 @@ Responsibilities:
 
 import os
 import shutil
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
@@ -403,15 +403,41 @@ class OutfitManager:
                     h.outfit_original_points,
                 )
 
+        # --- 独立服装滑块:从 outfit_config 读取记录,计算并合并 morph delta ---
+        oc_sliders: List[Tuple[str, Dict[str, Any]]] = []
+        ocm = h.outfit_config_mgr
+        if ocm and mod_path:
+            oc_map = ocm.list_outfit_sliders(char_id, mod_path)
+            for sid, rec in oc_map.items():
+                oc_sliders.append((sid, rec))
+            if oc_sliders:
+                self.refresh_outfit_custom_morphs(
+                    char_id, original_path, mod_path,
+                    [sid for sid, _ in oc_sliders],
+                )
+
         viewer = h.get_plotter()
         if not viewer:
             return
 
-        # Apply morphs to outfit mesh
+        # Apply morphs to outfit mesh.
+        # 独立服装滑块的 morph key 为 "custom/{slider_id}",不在 sliders_info 中,
+        # 需要构建 effective_info 把它们的 current_value 合并进来供 apply_morphs 使用。
+        effective_si: Dict[str, Dict[str, Any]] = dict(h.sliders_info)
+        for sid, rec in oc_sliders:
+            morph_key = self.outfit_custom_morph_key(sid)
+            effective_si[morph_key] = {
+                "name": rec.get("name", sid),
+                "min": float(rec.get("min", -50)),
+                "max": float(rec.get("max", 150)),
+                "current_value": float(rec.get("current_value", 0.0)),
+                "is_default": False,
+            }
+
         morphed = h.apply_morphs(
             h.outfit_original_points,
             h.outfit_morph_data,
-            h.sliders_info,
+            effective_si,
         )
 
         # Add outfit meshes with prefix "outfit_"
@@ -531,6 +557,34 @@ class OutfitManager:
                         effective_info[char_sid] = entry
             sliders_info = effective_info
 
+        # --- 合并独立服装滑块的 current_value到 effective_info ---
+        # 独立服装滑块的 morph key = "custom/{slider_id}",从 outfit_config
+        # 读取当前 outfit 的记录;同时用内存 outfit_slider_values 覆盖最新拖动值
+        # (outfit_slider_values 的 key 为 "outfit_custom/{slider_id}")。
+        ocm = h.outfit_config_mgr
+        if ocm and h.active_outfit_mod_path:
+            oc_map = ocm.list_outfit_sliders(
+                h.active_char_id or "", h.active_outfit_mod_path
+            )
+            if oc_map:
+                if not isinstance(sliders_info, dict) or sliders_info is h.sliders_info:
+                    sliders_info = dict(sliders_info)
+                for sid, rec in oc_map.items():
+                    morph_key = self.outfit_custom_morph_key(sid)
+                    # 内存中的实时拖动值优先(若存在)
+                    mem_key = f"outfit_{morph_key}"
+                    live_val = slider_values.get(mem_key)
+                    cv = float(live_val) if live_val is not None else float(
+                        rec.get("current_value", 0.0)
+                    )
+                    sliders_info[morph_key] = {
+                        "name": rec.get("name", sid),
+                        "min": float(rec.get("min", -50)),
+                        "max": float(rec.get("max", 150)),
+                        "current_value": cv,
+                        "is_default": False,
+                    }
+
         outfit_morphed = h.apply_morphs(
             h.outfit_original_points,
             outfit_morph_data,
@@ -612,28 +666,68 @@ class OutfitManager:
                     has_mesh = any(os.path.exists(c) for c in candidates)
                     if not has_mesh:
                         continue
-                    char_sid = self._find_char_slider_by_short_id(short_id, char_id, sliders_info, is_custom=True)
-                    if char_sid:
-                        cinfo = sliders_info[char_sid]
-                        name = cinfo.get("name", short_id)
-                        min_v = float(cinfo.get("min", -50))
-                        max_v = float(cinfo.get("max", 150))
-                        cur_v = float(cinfo.get("current_value", 0))
+                    # 优先判断是否为独立服装滑块(查 outfit_config),
+                    # 避免子串匹配误将其关联到角色滑块。
+                    oc_record = self._lookup_outfit_custom_record(
+                        active_outfit_mod_path, short_id
+                    )
+                    if oc_record and oc_record.get("is_outfit_custom") is True:
+                        # 独立服装滑块:不参与角色滑块匹配与 link
+                        name = oc_record.get("name", short_id)
+                        min_v = float(oc_record.get("min", -50))
+                        max_v = float(oc_record.get("max", 150))
+                        cur_v = float(oc_record.get("current_value", 0))
+                        key = f"outfit_{short_id}"
+                        discovered[key] = {
+                            "short_id": short_id,
+                            "name": name,
+                            "min": min_v,
+                            "max": max_v,
+                            "current_value": cur_v,
+                            "char_slider_id": None,
+                            "is_custom": True,
+                            "is_outfit_custom": True,
+                            "path": oc_record.get("path", ""),
+                            "slider_id": oc_record.get("slider_id", sub_entry),
+                        }
                     else:
-                        name = short_id
-                        min_v = -50.0
-                        max_v = 150.0
-                        cur_v = 0.0
-                    key = f"outfit_{short_id}"
-                    discovered[key] = {
-                        "short_id": short_id,
-                        "name": name,
-                        "min": min_v,
-                        "max": max_v,
-                        "current_value": cur_v,
-                        "char_slider_id": char_sid,
-                        "is_custom": True,
-                    }
+                        char_sid = self._find_char_slider_by_short_id(short_id, char_id, sliders_info, is_custom=True)
+                        if char_sid:
+                            # 已链接角色自定义滑块:沿用角色滑块属性
+                            cinfo = sliders_info[char_sid]
+                            name = cinfo.get("name", short_id)
+                            min_v = float(cinfo.get("min", -50))
+                            max_v = float(cinfo.get("max", 150))
+                            cur_v = float(cinfo.get("current_value", 0))
+                            key = f"outfit_{short_id}"
+                            discovered[key] = {
+                                "short_id": short_id,
+                                "name": name,
+                                "min": min_v,
+                                "max": max_v,
+                                "current_value": cur_v,
+                                "char_slider_id": char_sid,
+                                "is_custom": True,
+                                "is_outfit_custom": False,
+                            }
+                        else:
+                            # 既无角色滑块也无 outfit_config 记录:遗留目录,
+                            # 默认当成无链接项展示(不参与 link)
+                            name = short_id
+                            min_v = -50.0
+                            max_v = 150.0
+                            cur_v = 0.0
+                            key = f"outfit_{short_id}"
+                            discovered[key] = {
+                                "short_id": short_id,
+                                "name": name,
+                                "min": min_v,
+                                "max": max_v,
+                                "current_value": cur_v,
+                                "char_slider_id": None,
+                                "is_custom": True,
+                                "is_outfit_custom": False,
+                            }
             else:
                 short_id = entry
                 candidates = [
@@ -667,8 +761,14 @@ class OutfitManager:
                     "is_custom": False,
                 }
 
-        # Order by character slider order (sliders_info iteration order)
+        # Order: character sliders (default first, then linked custom) in
+        # sliders_info iteration order, then outfit-custom (independent)
+        # sliders last, then any leftover legacy entries.
         result: Dict[str, Dict[str, Any]] = {}
+        oc_keys: List[str] = []
+        leftover_keys: List[str] = []
+
+        # 1) 已链接角色滑块(默认 + 自定义),按 sliders_info 顺序
         for full_sid, info in sliders_info.items():
             parts = full_sid.split(".", 1)
             if len(parts) == 2:
@@ -678,18 +778,25 @@ class OutfitManager:
                     result[key] = discovered[key]
                     continue
                 # For custom sliders: full_sid uses "." but discovered key uses "/"
-                # e.g. full_sid="slider.custom.cd_phw_00_nude_00_0001_damian"
-                #      fid_short_id="custom.cd_phw_00_nude_00_0001_damian"
-                #      discovered key="outfit_custom/cd_phw_00_nude_00_0001_damian"
                 if fid_short_id.startswith("custom."):
                     custom_key = f"outfit_{fid_short_id.replace('.', '/', 1)}"
                     if custom_key in discovered:
                         result[custom_key] = discovered[custom_key]
 
-        # Append any discovered sliders not matched to character sliders
+        # 2) 分类剩余项:独立服装滑块 vs 遗留目录
         for key, info in discovered.items():
-            if key not in result:
-                result[key] = info
+            if key in result:
+                continue
+            if info.get("is_outfit_custom", False):
+                oc_keys.append(key)
+            else:
+                leftover_keys.append(key)
+
+        # 3) 追加顺序:先遗留(无角色匹配但非独立),再独立服装滑块
+        for key in leftover_keys:
+            result[key] = discovered[key]
+        for key in oc_keys:
+            result[key] = discovered[key]
 
         return result
 
@@ -746,3 +853,318 @@ class OutfitManager:
         else:
             if w > 1300:
                 h.resize_window(w - outfit_w, h.window_height())
+
+    # ===================== Outfit Custom (independent) Sliders =====================
+    #
+    # 独立服装滑块的业务方法。与角色滑块完全解耦:
+    #   - Target mesh 部署到 exported_outfit/{char_id}/custom/{slider_id}/<mod_dir>/<file>
+    #     文件名保持与原始 outfit 同名,slider_id 仅体现在目录层级
+    #   - morph delta 始终从部署后的 mesh 文件计算,写入 outfit_morph_data(以
+    #     "custom/{slider_id}" 为 key,与 short_id 一致)
+    #   - 属性持久化到 outfit_config/{char_id}.json(is_outfit_custom=true)
+    #   - 不写入 outfit_index.json,不与角色滑块建立链接
+
+    # ---- morph key convention ----
+    @staticmethod
+    def outfit_custom_morph_key(slider_id: str) -> str:
+        """Morph key for an outfit-custom slider = short_id = custom/{slider_id}."""
+        return f"custom/{slider_id}"
+
+    # ---- internal: lookup outfit_config record ----
+    def _lookup_outfit_custom_record(
+        self, active_outfit_mod_path: str, short_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Query outfit_config JSON for an outfit-custom slider record.
+        Returns the record dict or None.
+        """
+        h = self.host
+        ocm = h.outfit_config_mgr
+        if not ocm or not active_outfit_mod_path:
+            return None
+        # short_id is "custom/{slider_id}"; OCM stores it directly
+        data = ocm.get_all_for_char(h.active_char_id or "")
+        rec = data.get(active_outfit_mod_path, {}).get(short_id)
+        if isinstance(rec, dict):
+            return rec
+        # backslash fallback
+        alt_path = active_outfit_mod_path.replace("/", "\\")
+        rec = data.get(alt_path, {}).get(short_id)
+        if isinstance(rec, dict):
+            return rec
+        return None
+
+    # ---- path helpers ----
+    def _outfit_custom_deploy_dir(
+        self, char_id: str, slider_id: str
+    ) -> str:
+        """exported_outfit/{char_id}/custom/{slider_id}"""
+        h = self.host
+        return os.path.join(
+            h.root_dir, "exported_outfit", char_id, "custom", slider_id
+        )
+
+    def _outfit_custom_target_candidates(
+        self,
+        char_id: str,
+        slider_id: str,
+        mod_dir: str,
+        pac_base: str,
+        base_no_ext: str,
+    ) -> List[str]:
+        """Candidate target mesh paths for one outfit-custom slider."""
+        deploy_dir = os.path.join(
+            self._outfit_custom_deploy_dir(char_id, slider_id),
+            mod_dir if mod_dir else "",
+        )
+        return [
+            os.path.join(deploy_dir, pac_base),
+            os.path.join(deploy_dir, base_no_ext + ".obj"),
+            os.path.join(deploy_dir, base_no_ext + ".pac"),
+        ]
+
+    # ---- ADD ----
+    def add_outfit_custom_slider(
+        self,
+        char_id: str,
+        slider_id: str,
+        slider_name: str,
+        min_v: float,
+        max_v: float,
+        src_mesh_path: str,
+        outfit_original_path: str,
+        outfit_mod_path: str,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Deploy a new outfit-custom slider for the currently active outfit.
+
+        - Copies src_mesh_path into exported_outfit/.../custom/{slider_id}/<mod_dir>/<file>
+          (keeps the original outfit file name)
+        - Computes morph delta into outfit_morph_data
+        - Returns (slider_id, None) on success or (None, error) on failure.
+
+        Note: persistence to outfit_config JSON is performed by the caller
+        (BodySlider) to keep this manager free of UI concerns; this method
+        only returns the final deployed target path via the slider_info it
+        builds.
+        """
+        h = self.host
+        if not char_id or not slider_id or not src_mesh_path or not outfit_original_path:
+            return None, "Missing required parameters."
+        if not os.path.exists(src_mesh_path):
+            return None, "Source mesh file does not exist."
+
+        # Resolve <mod_dir> and <file> from the active outfit
+        pac_base = os.path.basename(outfit_original_path)          # e.g. cd_xxx.pac
+        base_no_ext = os.path.splitext(pac_base)[0]
+        mod_dir = os.path.dirname(outfit_mod_path or "")            # "" if top-level
+
+        deploy_dir = os.path.join(
+            self._outfit_custom_deploy_dir(char_id, slider_id),
+            mod_dir if mod_dir else "",
+        )
+        try:
+            os.makedirs(deploy_dir, exist_ok=True)
+        except OSError as e:
+            return None, f"Cannot create deploy directory: {e}"
+
+        # Target file name = keep the original outfit file name
+        dest_file = os.path.join(deploy_dir, pac_base)
+        try:
+            shutil.copy2(src_mesh_path, dest_file)
+        except OSError as e:
+            return None, f"Copy failed: {e}"
+
+        # Compute morph delta into outfit_morph_data (uses active outfit points)
+        morph_key = self.outfit_custom_morph_key(slider_id)
+        if h.outfit_original_points:
+            try:
+                h.compute_morph_delta(
+                    morph_key, dest_file,
+                    h.outfit_morph_data, h.outfit_original_points,
+                )
+            except Exception:
+                # non-fatal: slider exists but won't deform until mesh fixed
+                pass
+
+        return slider_id, None
+
+    def get_deployed_target_path(
+        self,
+        char_id: str,
+        slider_id: str,
+        outfit_original_path: str,
+        outfit_mod_path: str,
+    ) -> str:
+        """
+        Return the deployed mesh path (best candidate) for an outfit-custom
+        slider for the given active outfit. Used to recompute morph after edit.
+        """
+        if not outfit_original_path:
+            return ""
+        pac_base = os.path.basename(outfit_original_path)
+        base_no_ext = os.path.splitext(pac_base)[0]
+        mod_dir = os.path.dirname(outfit_mod_path or "")
+        for c in self._outfit_custom_target_candidates(
+            char_id, slider_id, mod_dir, pac_base, base_no_ext
+        ):
+            if os.path.exists(c):
+                return c
+        return ""
+
+    # ---- EDIT ----
+    def edit_outfit_custom_slider(
+        self,
+        char_id: str,
+        old_slider_id: str,
+        new_slider_id: str,
+        new_src_mesh_path: str,
+        outfit_original_path: str,
+        outfit_mod_path: str,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Edit an outfit-custom slider. Handles three cases:
+          1) slider_id unchanged, new mesh provided -> overwrite mesh, recompute
+          2) slider_id changed -> rename deploy dir, recompute; caller updates JSON
+          3) slider_id changed and mesh provided -> both
+
+        Returns (new_slider_id, None) on success or (None, error).
+        Persistence (JSON rename + path update) is the caller's responsibility.
+        """
+        h = self.host
+        if not char_id or not old_slider_id or not new_slider_id:
+            return None, "Missing required parameters."
+        if not outfit_original_path:
+            return None, "No active outfit."
+
+        old_deploy_root = self._outfit_custom_deploy_dir(char_id, old_slider_id)
+        new_deploy_root = self._outfit_custom_deploy_dir(char_id, new_slider_id)
+
+        # 1) If slider_id changed, rename the deploy directory first.
+        if new_slider_id != old_slider_id:
+            if os.path.isdir(old_deploy_root) and not os.path.exists(new_deploy_root):
+                try:
+                    shutil.move(old_deploy_root, new_deploy_root)
+                except OSError as e:
+                    return None, f"Cannot rename slider directory: {e}"
+            elif os.path.isdir(old_deploy_root) and os.path.exists(new_deploy_root):
+                # Target exists: merge is unsafe; refuse.
+                return None, "Target slider id already exists on disk."
+
+            # Replace morph_data key
+            old_key = self.outfit_custom_morph_key(old_slider_id)
+            new_key = self.outfit_custom_morph_key(new_slider_id)
+            md = h.outfit_morph_data or {}
+            if old_key in md:
+                md[new_key] = md.pop(old_key)
+
+        # 2) If a new mesh file was provided, overwrite the deployed file.
+        if new_src_mesh_path:
+            if not os.path.exists(new_src_mesh_path):
+                return None, "New source mesh file does not exist."
+            pac_base = os.path.basename(outfit_original_path)
+            base_no_ext = os.path.splitext(pac_base)[0]
+            mod_dir = os.path.dirname(outfit_mod_path or "")
+            deploy_dir = os.path.join(
+                new_deploy_root, mod_dir if mod_dir else ""
+            )
+            try:
+                os.makedirs(deploy_dir, exist_ok=True)
+            except OSError as e:
+                return None, f"Cannot create deploy directory: {e}"
+            dest_file = os.path.join(deploy_dir, pac_base)
+            # Remove any stale previously-deployed candidate files for this outfit
+            for stale_ext in (".obj", ".pac"):
+                if not pac_base.lower().endswith(stale_ext):
+                    stale = os.path.join(deploy_dir, base_no_ext + stale_ext)
+                    if os.path.exists(stale):
+                        try:
+                            os.remove(stale)
+                        except OSError:
+                            pass
+            try:
+                shutil.copy2(new_src_mesh_path, dest_file)
+            except OSError as e:
+                return None, f"Copy failed: {e}"
+
+            # Recompute morph delta with new key/target
+            new_key = self.outfit_custom_morph_key(new_slider_id)
+            if h.outfit_original_points:
+                # Clear old delta then recompute
+                h.outfit_morph_data.pop(new_key, None)
+                try:
+                    h.compute_morph_delta(
+                        new_key, dest_file,
+                        h.outfit_morph_data, h.outfit_original_points,
+                    )
+                except Exception:
+                    pass
+
+        return new_slider_id, None
+
+    # ---- DELETE ----
+    def delete_outfit_custom_slider(
+        self,
+        char_id: str,
+        slider_id: str,
+    ) -> bool:
+        """
+        Delete an outfit-custom slider's deployed directory and morph data.
+        Returns True if anything was removed.
+        """
+        h = self.host
+        removed = False
+
+        deploy_root = self._outfit_custom_deploy_dir(char_id, slider_id)
+        if os.path.isdir(deploy_root):
+            try:
+                shutil.rmtree(deploy_root)
+                removed = True
+            except OSError:
+                pass
+
+        morph_key = self.outfit_custom_morph_key(slider_id)
+        md = h.outfit_morph_data or {}
+        if morph_key in md:
+            md.pop(morph_key, None)
+            removed = True
+
+        return removed
+
+    # ---- refresh morph after structural change ----
+    def refresh_outfit_custom_morphs(
+        self,
+        char_id: str,
+        outfit_original_path: str,
+        outfit_mod_path: str,
+        slider_ids: List[str],
+    ) -> None:
+        """
+        Recompute morph deltas for the given outfit-custom sliders against the
+        currently active outfit. Called after add/edit or when outfit activated.
+        """
+        h = self.host
+        if not h.outfit_original_points or not outfit_original_path:
+            return
+        pac_base = os.path.basename(outfit_original_path)
+        base_no_ext = os.path.splitext(pac_base)[0]
+        mod_dir = os.path.dirname(outfit_mod_path or "")
+        for sid in slider_ids:
+            target = ""
+            for c in self._outfit_custom_target_candidates(
+                char_id, sid, mod_dir, pac_base, base_no_ext
+            ):
+                if os.path.exists(c):
+                    target = c
+                    break
+            if not target:
+                continue
+            morph_key = self.outfit_custom_morph_key(sid)
+            h.outfit_morph_data.pop(morph_key, None)
+            try:
+                h.compute_morph_delta(
+                    morph_key, target,
+                    h.outfit_morph_data, h.outfit_original_points,
+                )
+            except Exception:
+                pass

@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
     QDoubleSpinBox,
     QGroupBox,
     QSizePolicy,
+    QDialog,
 )
 from PyQt6.QtCore import (
     Qt,
@@ -71,6 +72,14 @@ from core.ui_constants import (
     BTN_EXPORT_ROW_SPACING,
     BTN_EXPORT_TWO_ROW_MARGINS,
     BTN_EXPORT_TWO_ROW_SPACING,
+)
+
+from core.ui_dialogs import (
+    AddOutfitSliderDialog,
+    EditOutfitSliderDialog,
+    show_warning,
+    show_critical,
+    show_question,
 )
 
 
@@ -574,6 +583,12 @@ class MainWindowUIMixin:
             )
             outfit_sliders_panel.outfitExportObjRequested.connect(
                 self._on_outfit_export_obj
+            )
+            outfit_sliders_panel.outfitCustomEditRequested.connect(
+                self._edit_outfit_custom_slider
+            )
+            outfit_sliders_panel.outfitCustomDeleteRequested.connect(
+                self._delete_outfit_custom_slider
             )
 
             # Wrapper container for outfit sliders + buttons at the bottom
@@ -1309,8 +1324,225 @@ class MainWindowUIMixin:
                 self.outfit_mgr.update_outfit_morphs()
 
     def _on_outfit_add_slider(self):
-        """Handle outfit add slider button click (to be implemented)."""
-        pass
+        """Handle "+ Add Outfit Custom Slider" button click."""
+        char_id = self.active_char_id
+        if not char_id:
+            return
+        # Require an active outfit
+        if not self.active_outfit_path or not self.active_outfit_mod_path:
+            show_warning(
+                self,
+                self.T.get("msg_error", "Error"),
+                self.T.get("outfit_add_need_active", "Activate an outfit first."),
+            )
+            return
+
+        # Build existing-id set (global): character sliders + outfit-custom ids
+        existing_ids = list(self.sliders_info.keys())
+        ocm = getattr(self, "outfit_config_mgr", None)
+        if ocm:
+            existing_ids.extend(ocm.list_outfit_slider_ids(char_id))
+
+        dlg = AddOutfitSliderDialog(self.T, existing_ids, char_id, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dlg.get_result()
+        if not result:
+            return
+
+        slider_name, slider_id, mesh_path, vmin, vmax = result
+
+        # Validate Target Mesh against the active outfit signature
+        outfit_sig = [
+            (name, int(len(verts)))
+            for name, verts in (self.outfit_original_points or {}).items()
+        ]
+        from core.mesh_validator import validate_target_mesh_against_original
+        error_msg = validate_target_mesh_against_original(
+            mesh_path,
+            outfit_sig,
+            translation_fn=lambda key, fallback: self.T.get(key, fallback),
+        )
+        if error_msg:
+            show_warning(
+                self,
+                self.T.get("mesh_validation_title", "Target Mesh Incompatible"),
+                error_msg,
+            )
+            return
+
+        # Deploy mesh + compute morph delta via OutfitManager
+        new_sid, err = self.outfit_mgr.add_outfit_custom_slider(
+            char_id=char_id,
+            slider_id=slider_id,
+            slider_name=slider_name,
+            min_v=vmin,
+            max_v=vmax,
+            src_mesh_path=mesh_path,
+            outfit_original_path=self.active_outfit_path,
+            outfit_mod_path=self.active_outfit_mod_path,
+        )
+        if not new_sid or err:
+            show_critical(self, self.T.get("msg_error", "Error"), err or "Failed to add outfit slider.")
+            return
+
+        # Resolve deployed target path (relative) for persistence
+        deployed_abs = self.outfit_mgr.get_deployed_target_path(
+            char_id, slider_id, self.active_outfit_path, self.active_outfit_mod_path
+        )
+        rel_path = self._norm_path(
+            os.path.relpath(deployed_abs, self.root_dir)
+        ) if deployed_abs else ""
+
+        # Persist to outfit_config JSON
+        if ocm and self.active_outfit_mod_path:
+            ocm.save_outfit_slider(
+                char_id, self.active_outfit_mod_path, slider_id,
+                {
+                    "name": slider_name,
+                    "min": float(vmin),
+                    "max": float(vmax),
+                    "current_value": 0.0,
+                    "path": rel_path,
+                },
+            )
+
+        # Refresh UI + 3D preview
+        self._load_outfit_sliders(self.active_outfit_mod_path)
+        self.outfit_mgr.update_outfit_morphs()
+
+    def _edit_outfit_custom_slider(self, slider_id: str):
+        """Edit an outfit-custom slider (Edit button)."""
+        char_id = self.active_char_id
+        if not char_id or not slider_id:
+            return
+        if not self.active_outfit_path or not self.active_outfit_mod_path:
+            return
+        ocm = getattr(self, "outfit_config_mgr", None)
+        if not ocm:
+            return
+        rec = ocm.get_outfit_slider(char_id, self.active_outfit_mod_path, slider_id)
+        if not rec:
+            return
+
+        # Build existing-id set excluding current
+        existing_ids = list(self.sliders_info.keys())
+        existing_ids.extend(ocm.list_outfit_slider_ids(char_id))
+
+        # Current deployed mesh path (absolute)
+        current_mesh = self.outfit_mgr.get_deployed_target_path(
+            char_id, slider_id, self.active_outfit_path, self.active_outfit_mod_path
+        )
+
+        dlg = EditOutfitSliderDialog(
+            self.T,
+            existing_ids,
+            char_id,
+            rec.get("name", slider_id),
+            slider_id,
+            current_mesh,
+            float(rec.get("min", -50)),
+            float(rec.get("max", 150)),
+            self,
+        )
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        result = dlg.get_result()
+        if not result:
+            return
+
+        new_name, new_id, new_mesh_path, new_min, new_max = result
+
+        # Validate new mesh if changed against outfit signature
+        outfit_sig = [
+            (name, int(len(verts)))
+            for name, verts in (self.outfit_original_points or {}).items()
+        ]
+        from core.mesh_validator import validate_target_mesh_against_original
+        error_msg = validate_target_mesh_against_original(
+            new_mesh_path,
+            outfit_sig,
+            translation_fn=lambda key, fallback: self.T.get(key, fallback),
+        )
+        if error_msg:
+            show_warning(
+                self,
+                self.T.get("mesh_validation_title", "Target Mesh Incompatible"),
+                error_msg,
+            )
+            return
+
+        # OutfitManager handles dir rename + morph key update + mesh overwrite
+        ok_sid, err = self.outfit_mgr.edit_outfit_custom_slider(
+            char_id=char_id,
+            old_slider_id=slider_id,
+            new_slider_id=new_id,
+            new_src_mesh_path=new_mesh_path if new_mesh_path != current_mesh else "",
+            outfit_original_path=self.active_outfit_path,
+            outfit_mod_path=self.active_outfit_mod_path,
+        )
+        if not ok_sid or err:
+            show_critical(self, self.T.get("msg_error", "Error"), err or "Failed to edit outfit slider.")
+            return
+
+        # Update JSON: rename + update fields + path
+        # Resolve new deployed path
+        new_deployed = self.outfit_mgr.get_deployed_target_path(
+            char_id, new_id, self.active_outfit_path, self.active_outfit_mod_path
+        )
+        new_rel = self._norm_path(
+            os.path.relpath(new_deployed, self.root_dir)
+        ) if new_deployed else ""
+        if slider_id != new_id:
+            ocm.rename_outfit_slider(
+                char_id, self.active_outfit_mod_path, slider_id, new_id
+            )
+        ocm.save_outfit_slider(
+            char_id, self.active_outfit_mod_path, new_id,
+            {
+                "name": new_name,
+                "min": float(new_min),
+                "max": float(new_max),
+                "current_value": float(rec.get("current_value", 0.0)),
+                "path": new_rel,
+            },
+        )
+
+        # Refresh UI + 3D preview
+        self._load_outfit_sliders(self.active_outfit_mod_path)
+        self.outfit_mgr.update_outfit_morphs()
+
+    def _delete_outfit_custom_slider(self, slider_id: str):
+        """Delete an outfit-custom slider (× button)."""
+        char_id = self.active_char_id
+        if not char_id or not slider_id:
+            return
+        if not self.active_outfit_path or not self.active_outfit_mod_path:
+            return
+
+        reply = show_question(
+            self,
+            self.T.get("outfit_custom_del_title", "Delete Outfit Custom Slider"),
+            self.T.get(
+                "outfit_custom_del_msg",
+                'Delete outfit custom slider "{name}"?\nThis removes its deployed mesh, morph data, and config record.',
+            ).format(name=slider_id),
+            yes_text=self.T.get("btn_yes", "Yes"),
+            no_text=self.T.get("btn_no", "No"),
+        )
+        if not reply:
+            return
+
+        ocm = getattr(self, "outfit_config_mgr", None)
+        if ocm and self.active_outfit_mod_path:
+            ocm.delete_outfit_slider(char_id, self.active_outfit_mod_path, slider_id)
+
+        # Remove deployed dir + morph data
+        self.outfit_mgr.delete_outfit_custom_slider(char_id, slider_id)
+
+        # Refresh UI + 3D preview
+        self._load_outfit_sliders(self.active_outfit_mod_path)
+        self.outfit_mgr.update_outfit_morphs()
 
     def _on_outfit_export_obj(self):
         """Handle outfit export OBJ button click."""

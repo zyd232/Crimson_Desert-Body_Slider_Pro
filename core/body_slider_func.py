@@ -1820,18 +1820,41 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         slider_values = getattr(self, "outfit_slider_values", {}) or {}
         slider_mapping = getattr(self, "outfit_slider_mapping", {}) or {}
 
-        if not link_states:
-            return sliders_info
-
         effective_info: Dict[str, Dict[str, Any]] = dict(sliders_info)
-        for outfit_key, linked in link_states.items():
-            if not linked:
-                char_sid = slider_mapping.get(outfit_key)
-                if char_sid and char_sid in effective_info:
-                    val = slider_values.get(outfit_key, 0.0)
-                    entry = dict(effective_info[char_sid])
-                    entry["current_value"] = val
-                    effective_info[char_sid] = entry
+
+        # Merge unlinked character sliders' current_value
+        if link_states:
+            for outfit_key, linked in link_states.items():
+                if not linked:
+                    char_sid = slider_mapping.get(outfit_key)
+                    if char_sid and char_sid in effective_info:
+                        val = slider_values.get(outfit_key, 0.0)
+                        entry = dict(effective_info[char_sid])
+                        entry["current_value"] = val
+                        effective_info[char_sid] = entry
+
+        # Merge outfit-custom (independent) sliders' current_value.
+        # Their morph key = "custom/{slider_id}". Live drag values in
+        # outfit_slider_values use key "outfit_custom/{slider_id}".
+        ocm = getattr(self, "outfit_config_mgr", None)
+        mod_path = getattr(self, "active_outfit_mod_path", None) or ""
+        if ocm and mod_path:
+            oc_map = ocm.list_outfit_sliders(self.active_char_id or "", mod_path)
+            for sid, rec in oc_map.items():
+                morph_key = f"custom/{sid}"
+                mem_key = f"outfit_{morph_key}"
+                live_val = slider_values.get(mem_key)
+                cv = float(live_val) if live_val is not None else float(
+                    rec.get("current_value", 0.0)
+                )
+                effective_info[morph_key] = {
+                    "name": rec.get("name", sid),
+                    "min": float(rec.get("min", -50)),
+                    "max": float(rec.get("max", 150)),
+                    "current_value": cv,
+                    "is_default": False,
+                }
+
         return effective_info
 
     def _export_current_outfit_to_obj(self, obj_path: str):
@@ -2285,6 +2308,67 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                                 except Exception:
                                     pass
 
+                            # --- 独立服装滑块 morph delta 计算 ---
+                            # 从 outfit_config JSON 读取该 outfit 的 is_outfit_custom 记录,
+                            # 用 record 的 path 定位 exported_outfit 中的 mesh,以
+                            # "custom/{slider_id}" 作为 morph key 写入 outfit_morph_data。
+                            outfit_oc_sliders: Dict[str, Dict[str, Any]] = {}
+                            if self.outfit_config_all:
+                                _oc_all = self.outfit_config_all.get(rel_path, {}) or {}
+                                if not _oc_all:
+                                    alt_path = rel_path.replace("/", "\\")
+                                    _oc_all = self.outfit_config_all.get(alt_path, {}) or {}
+                                for _sid, _sd in _oc_all.items():
+                                    if isinstance(_sd, dict) and _sd.get("is_outfit_custom") is True:
+                                        outfit_oc_sliders[_sid] = _sd
+
+                            for oc_short_id, oc_rec in outfit_oc_sliders.items():
+                                # oc_short_id 形如 "custom/{slider_id}",直接作为 slider_ref_path
+                                slider_ref_path = oc_short_id
+                                _deploy_dir = os.path.join(exported_outfit_root, slider_ref_path)
+                                _tgt_subdir = os.path.join(_deploy_dir, outfit_pac_dir) if outfit_pac_dir else _deploy_dir
+
+                                _candidates = []
+                                _c1 = os.path.join(_tgt_subdir, ofn)
+                                if os.path.exists(_c1):
+                                    _candidates.append(_c1)
+                                _c2 = os.path.join(_tgt_subdir, base_no_ext + ".obj")
+                                if os.path.exists(_c2):
+                                    _candidates.append(_c2)
+                                _c3 = os.path.join(_tgt_subdir, base_no_ext + ".pac")
+                                if os.path.exists(_c3):
+                                    _candidates.append(_c3)
+                                if not _candidates:
+                                    continue
+
+                                _target_file = _candidates[0]
+                                _cached = self._target_cache.get(_target_file)
+                                if _cached is None:
+                                    try:
+                                        _cached = {}
+                                        if _target_file.lower().endswith(".pac"):
+                                            with open(_target_file, "rb") as f:
+                                                _tp = parse_pac(f.read(), _target_file)
+                                            for sm in _tp.submeshes:
+                                                if sm.vertices:
+                                                    _cached[sm.name] = _np.array(sm.vertices, dtype=_np.float32)
+                                        else:
+                                            _cached = self._parse_obj_lightweight(_target_file)
+                                    except Exception:
+                                        continue
+
+                                try:
+                                    _deltas = {}
+                                    for pac_name, orig_verts in outfit_original_points.items():
+                                        if pac_name in _cached:
+                                            _tv = _cached[pac_name]
+                                            if len(_tv) == len(orig_verts):
+                                                _deltas[pac_name] = _tv - orig_verts
+                                    if _deltas:
+                                        outfit_morph_data[oc_short_id] = _deltas
+                                except Exception:
+                                    pass
+
                             dest_dir = os.path.join(self.files_dir, outfit_pac_dir) if outfit_pac_dir else self.files_dir
                             os.makedirs(dest_dir, exist_ok=True)
 
@@ -2350,6 +2434,16 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                                             entry = dict(effective_info[char_sid])
                                             entry["current_value"] = val
                                             effective_info[char_sid] = entry
+
+                            # 合并独立服装滑块到 effective_info(以 "custom/{slider_id}" 为 key)
+                            for oc_short_id, oc_rec in outfit_oc_sliders.items():
+                                effective_info[oc_short_id] = {
+                                    "name": oc_rec.get("name", oc_short_id),
+                                    "min": float(oc_rec.get("min", -50)),
+                                    "max": float(oc_rec.get("max", 150)),
+                                    "current_value": float(oc_rec.get("current_value", 0.0)),
+                                    "is_default": False,
+                                }
 
                             # DIAG: Log effective slider values used
                             for _sid, _info in effective_info.items():

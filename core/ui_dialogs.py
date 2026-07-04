@@ -740,6 +740,306 @@ class EditSliderDialog(DialogBase):
 
 
 # ==========================================
+# 5b. AddOutfitSliderDialog
+# ==========================================
+#
+# 独立服装滑块的新建对话框。字段与 AddSliderDialog 相同
+# (Name / ID / Target Mesh / Range),但:
+#   - 使用 outfit 专属标题 key;
+#   - slider_id 校验冲突范围由调用方传入(existing_ids 已合并角色滑块
+#     local_ids 与已有独立服装滑块 ids);
+#   - mesh 可通过 Browse 选择(.obj/.pac),不强制只读。
+# 返回 (name, slider_id, mesh_path, vmin, vmax)。
+
+
+class AddOutfitSliderDialog(DialogBase):
+    def __init__(self, T: "TranslationProxy", existing_ids: List[str], char_id: str, parent=None):
+        super().__init__(parent)
+        self.T = T
+        self.char_id = char_id
+        # existing_ids may contain either full ids ("a.b") or bare local ids;
+        # we collect all local parts for collision checking.
+        self._existing_local_ids: Set[str] = set()
+        for sid in existing_ids or []:
+            if not sid:
+                continue
+            self._existing_local_ids.add(sid.split(".", 1)[-1] if "." in sid else sid)
+        self._result: Optional[Tuple[str, str, str, float, float]] = None
+
+        self.setWindowTitle(T.get("dlg_add_outfit_slider_title", "Add Outfit Custom Slider"))
+        self.setMinimumWidth(440)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.title_bar = CustomTitleBar(
+            T.get("dlg_add_outfit_slider_title", "Add Outfit Custom Slider"),
+            show_minimize=False, show_maximize=False
+        )
+        main_layout.addWidget(self.title_bar)
+
+        content = QWidget()
+        content.setStyleSheet(DIALOG_CONTENT_BG)
+        form_layout = QFormLayout(content)
+        form_layout.setContentsMargins(16, 14, 16, 10)
+        form_layout.setSpacing(8)
+
+        self.name_edit = QLineEdit()
+        self.name_edit.setObjectName("dialog_input")
+        self.name_edit.setStyleSheet(DIALOG_INPUT_STYLE)
+        self.name_edit.setMaxLength(SLIDER_NAME_MAX_LEN)
+        self.name_edit.setPlaceholderText(T.get("dlg_slider_name_placeholder", "Enter slider name..."))
+        self.name_edit.returnPressed.connect(self._on_accept)
+        form_layout.addRow(T.get("label_slider_name", "Name:"), self.name_edit)
+
+        self.id_edit = QLineEdit()
+        self.id_edit.setObjectName("dialog_input")
+        self.id_edit.setStyleSheet(DIALOG_INPUT_STYLE)
+        self.id_edit.setMaxLength(CHAR_NAME_MAX_LEN)
+        self.id_edit.setPlaceholderText(T.get("placeholder_slider_id", "Letters, numbers, underscore only (e.g. breast_size)"))
+        self.id_edit.returnPressed.connect(self._on_accept)
+        form_layout.addRow(T.get("label_id", "ID:"), self.id_edit)
+
+        self.mesh_edit = QLineEdit()
+        self.mesh_edit.setObjectName("dialog_input")
+        self.mesh_edit.setStyleSheet(DIALOG_INPUT_STYLE)
+        self.mesh_edit.setPlaceholderText(T.get("placeholder_slider_mesh", "Select a target mesh file (.obj or .pac)"))
+        self.mesh_edit.returnPressed.connect(self._on_accept)
+        btn_browse_mesh = SmoothHoverButton(T.get("btn_browse", "Browse..."))
+        btn_browse_mesh.setObjectName("btn_base_secondary")
+        btn_browse_mesh.setFixedHeight(28)
+        btn_browse_mesh.clicked.connect(self._browse_mesh)
+        mesh_row = QHBoxLayout()
+        mesh_row.addWidget(self.mesh_edit, stretch=1)
+        mesh_row.addWidget(btn_browse_mesh)
+        form_layout.addRow(T.get("label_slider_mesh", "Target Mesh:"), mesh_row)
+
+        self.range_edit = QLineEdit()
+        self.range_edit.setObjectName("dialog_input")
+        self.range_edit.setStyleSheet(DIALOG_INPUT_STYLE)
+        self.range_edit.setPlaceholderText(T.get("placeholder_slider_range", "Format: min,max (e.g. -50,150)"))
+        self.range_edit.setText("-50,150")
+        self.range_edit.returnPressed.connect(self._on_accept)
+        form_layout.addRow(T.get("label_slider_range", "Range:"), self.range_edit)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        def make_btn(text, result_code):
+            b = SmoothHoverButton(text)
+            b.setObjectName("btn_base_secondary")
+            b.setFixedSize(90, 28)
+            if result_code == QDialog.DialogCode.Accepted:
+                b.clicked.connect(self._on_accept)
+            else:
+                b.clicked.connect(lambda: self.done(result_code))
+            return b
+
+        btn_layout.addWidget(make_btn(self.T["btn_ok"], QDialog.DialogCode.Accepted))
+        btn_layout.addWidget(make_btn(self.T["btn_cancel"], QDialog.DialogCode.Rejected))
+        form_layout.addRow(btn_layout)
+        main_layout.addWidget(content)
+
+    def _browse_mesh(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self,
+            self.T.get("dlg_add_outfit_slider_select_title", "Select Target Mesh for Outfit Slider"),
+            "",
+            "Mesh Files (*.obj *.pac);;OBJ Files (*.obj);;PAC Files (*.pac)",
+        )
+        if path:
+            self.mesh_edit.setText(path)
+
+    def _on_accept(self):
+        try:
+            name = self.name_edit.text().strip()
+            slider_id = self.id_edit.text().strip()
+            mesh_path = self.mesh_edit.text().strip()
+            range_text = self.range_edit.text().strip()
+
+            if not name:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_name_required", "Slider name is required."))
+                return
+            if not slider_id:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_id_required", "Slider ID is required."))
+                return
+            if not CHAR_ID_PATTERN.fullmatch(slider_id):
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_id_invalid", "ID can only contain letters, numbers, and underscores."))
+                return
+            if slider_id in self._existing_local_ids:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("char_id_duplicate", "This ID is already in use. Please choose another."))
+                return
+            if not mesh_path:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_mesh_required", "Target mesh file is required."))
+                return
+            if not os.path.exists(mesh_path):
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_mesh_not_found", "The specified file does not exist."))
+                return
+            try:
+                parts = [p.strip() for p in range_text.split(",")]
+                if len(parts) != 2:
+                    raise ValueError()
+                vmin, vmax = float(parts[0]), float(parts[1])
+                if vmin >= vmax:
+                    show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_range_invalid", "Min must be less than max."))
+                    return
+            except (ValueError, IndexError):
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_range_format", "Invalid range format. Use: min,max (e.g. -50,150)"))
+                return
+
+            self._result = (name, slider_id, mesh_path, vmin, vmax)
+            self.done(QDialog.DialogCode.Accepted)
+        except Exception:
+            try:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("msg_error", "An error occurred. Please check your input."))
+            except Exception:
+                pass
+
+    def get_result(self) -> Optional[Tuple[str, str, str, float, float]]:
+        return self._result
+
+
+# ==========================================
+# 5c. EditOutfitSliderDialog
+# ==========================================
+#
+# 独立服装滑块的编辑对话框。允许修改 name / slider_id / Target Mesh /
+# Range。slider_id 变化时由调用方负责三级联动(重命名子目录、更新 morph
+# key、更新 JSON)。current_id 传入纯 slider_id(不含 char_id 前缀)。
+
+
+class EditOutfitSliderDialog(DialogBase):
+    def __init__(self, T: "TranslationProxy", existing_ids: List[str], char_id: str,
+                 current_name: str, current_slider_id: str, current_mesh: str,
+                 current_min: float, current_max: float, parent=None):
+        super().__init__(parent)
+        self.T = T
+        self.char_id = char_id
+        # exclude current slider_id from collision set
+        self._existing_local_ids: Set[str] = {
+            (sid.split(".", 1)[-1] if "." in sid else sid)
+            for sid in (existing_ids or [])
+            if sid and (sid.split(".", 1)[-1] if "." in sid else sid) != current_slider_id
+        }
+        self._result: Optional[Tuple[str, str, str, float, float]] = None
+
+        self.setWindowTitle(T.get("dlg_edit_outfit_slider_title", "Edit Outfit Custom Slider"))
+        self.setMinimumWidth(440)
+
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        self.title_bar = CustomTitleBar(
+            T.get("dlg_edit_outfit_slider_title", "Edit Outfit Custom Slider"),
+            show_minimize=False, show_maximize=False
+        )
+        main_layout.addWidget(self.title_bar)
+
+        content = QWidget()
+        content.setStyleSheet(DIALOG_CONTENT_BG)
+        form_layout = QFormLayout(content)
+        form_layout.setContentsMargins(16, 14, 16, 10)
+        form_layout.setSpacing(8)
+
+        self.name_edit = QLineEdit(current_name)
+        self.name_edit.setObjectName("dialog_input")
+        self.name_edit.setStyleSheet(DIALOG_INPUT_STYLE)
+        self.name_edit.setMaxLength(SLIDER_NAME_MAX_LEN)
+        self.name_edit.setPlaceholderText(T.get("dlg_slider_name_placeholder", "Enter slider name..."))
+        self.name_edit.returnPressed.connect(self._on_accept)
+        form_layout.addRow(T.get("label_slider_name", "Name:"), self.name_edit)
+
+        self.id_edit = QLineEdit(current_slider_id)
+        self.id_edit.setObjectName("dialog_input")
+        self.id_edit.setStyleSheet(DIALOG_INPUT_STYLE)
+        self.id_edit.setMaxLength(CHAR_NAME_MAX_LEN)
+        self.id_edit.setPlaceholderText(T.get("placeholder_slider_id", "Letters, numbers, underscore only (e.g. breast_size)"))
+        self.id_edit.returnPressed.connect(self._on_accept)
+        form_layout.addRow(T.get("label_id", "ID:"), self.id_edit)
+
+        self.mesh_edit = QLineEdit(current_mesh)
+        self.mesh_edit.setObjectName("dialog_input")
+        self.mesh_edit.setReadOnly(True)
+        self.mesh_edit.setStyleSheet(DIALOG_INPUT_READONLY_STYLE)
+        form_layout.addRow(T.get("label_slider_mesh", "Target Mesh:"), self.mesh_edit)
+
+        self.range_edit = QLineEdit(f"{int(current_min)},{int(current_max)}")
+        self.range_edit.setObjectName("dialog_input")
+        self.range_edit.setStyleSheet(DIALOG_INPUT_STYLE)
+        self.range_edit.setPlaceholderText(T.get("placeholder_slider_range", "Format: min,max (e.g. -50,150)"))
+        self.range_edit.returnPressed.connect(self._on_accept)
+        form_layout.addRow(T.get("label_slider_range", "Range:"), self.range_edit)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        def make_btn(text, result_code):
+            b = SmoothHoverButton(text)
+            b.setObjectName("btn_base_secondary")
+            b.setFixedSize(90, 28)
+            if result_code == QDialog.DialogCode.Accepted:
+                b.clicked.connect(self._on_accept)
+            else:
+                b.clicked.connect(lambda: self.done(result_code))
+            return b
+
+        btn_layout.addWidget(make_btn(self.T["btn_ok"], QDialog.DialogCode.Accepted))
+        btn_layout.addWidget(make_btn(self.T["btn_cancel"], QDialog.DialogCode.Rejected))
+        form_layout.addRow(btn_layout)
+        main_layout.addWidget(content)
+
+    def _on_accept(self):
+        try:
+            name = self.name_edit.text().strip()
+            slider_id = self.id_edit.text().strip()
+            mesh_path = self.mesh_edit.text().strip()
+            range_text = self.range_edit.text().strip()
+
+            if not name:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_name_required", "Slider name is required."))
+                return
+            if not slider_id:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_id_required", "Slider ID is required."))
+                return
+            if not CHAR_ID_PATTERN.fullmatch(slider_id):
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_id_invalid", "ID can only contain letters, numbers, and underscores."))
+                return
+            if slider_id in self._existing_local_ids:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("char_id_duplicate", "This ID is already in use. Please choose another."))
+                return
+            if not mesh_path:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_mesh_required", "Target mesh file is required."))
+                return
+            if not os.path.exists(mesh_path):
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_mesh_not_found", "The specified file does not exist."))
+                return
+            try:
+                parts = [p.strip() for p in range_text.split(",")]
+                if len(parts) != 2:
+                    raise ValueError()
+                vmin, vmax = float(parts[0]), float(parts[1])
+                if vmin >= vmax:
+                    show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_range_invalid", "Min must be less than max."))
+                    return
+            except (ValueError, IndexError):
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("dlg_slider_range_format", "Invalid range format. Use: min,max (e.g. -50,150)"))
+                return
+
+            self._result = (name, slider_id, mesh_path, vmin, vmax)
+            self.done(QDialog.DialogCode.Accepted)
+        except Exception:
+            try:
+                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("msg_error", "An error occurred. Please check your input."))
+            except Exception:
+                pass
+
+    def get_result(self) -> Optional[Tuple[str, str, str, float, float]]:
+        return self._result
+
+
+# ==========================================
 # 6. AddCharacterDialog
 # ==========================================
 

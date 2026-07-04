@@ -395,10 +395,10 @@ def migrate_legacy_custom_sliders(
         return migrated_files, 0
 
     migrated_files = migrate_target_mesh_and_config(temp_dir, cid, root_dir)
-    # Rebuild the map after config rewrite so exported-outfit migration uses the
-    # final local ids (the map is keyed on local_id which is unchanged, but keep
-    # it consistent against any path normalisation that occurred).
-    rename_map = build_custom_slider_rename_map(temp_dir, cid)
+    # Reuse the original rename_map (old_file_basename -> local_id) for step B.
+    # Do NOT rebuild it after step A, because step A rewrites char_config paths
+    # to the new local-id names, which would cause build_custom_slider_rename_map
+    # to return an empty map (old_base == local_id for every slider).
     migrated_dirs = migrate_exported_outfit(temp_dir, cid, root_dir, rename_map)
     return migrated_files, migrated_dirs
 

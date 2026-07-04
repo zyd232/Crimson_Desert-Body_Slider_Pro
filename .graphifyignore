@@ -5,6 +5,7 @@
 bs/
 build/
 char_config/
+core/version.txt
 crash_report/
 exported_mesh/
 exported_mod/

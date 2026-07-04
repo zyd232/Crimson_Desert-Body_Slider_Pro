@@ -20,7 +20,7 @@ JSON structure:
 
 import os
 import json
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 
 class OutfitConfigManager:
@@ -131,3 +131,142 @@ class OutfitConfigManager:
                 os.remove(path)
             except OSError:
                 pass
+
+    # ===================== Outfit-Custom (independent) Sliders =====================
+    #
+    # 独立服装滑块(不链接角色滑块)的持久化。与上面的角色滑块 link/unlink 记录
+    # 共用同一个 JSON 文件,但通过字段 ``is_outfit_custom=True`` 标识与隔离,且
+    # 不写入 ``is_linked`` 字段。
+    #
+    # short_id 约定为 ``custom/{slider_id}``,与 exported_outfit 目录结构中的
+    # slider_segment 一致。
+
+    SHORT_ID_PREFIX = "custom/"
+
+    def outfit_slider_short_id(self, slider_id: str) -> str:
+        """Build the JSON short_id for an outfit-custom slider."""
+        return f"{self.SHORT_ID_PREFIX}{slider_id}"
+
+    def slider_id_from_short_id(self, short_id: str) -> str:
+        """Extract the bare slider_id from a ``custom/{slider_id}`` short_id."""
+        if short_id.startswith(self.SHORT_ID_PREFIX):
+            return short_id[len(self.SHORT_ID_PREFIX):]
+        return short_id
+
+    def is_outfit_custom_short_id(self, short_id: str) -> bool:
+        return short_id.startswith(self.SHORT_ID_PREFIX)
+
+    def save_outfit_slider(
+        self,
+        char_id: str,
+        outfit_mod_path: str,
+        slider_id: str,
+        slider_info: Dict[str, Any],
+    ) -> str:
+        """
+        Save (or update) an outfit-custom slider's config.
+
+        slider_info should NOT contain ``is_linked``; this method forces
+        ``is_outfit_custom=True`` and stores the morph-delta target ``path``.
+
+        Returns the short_id used as the JSON key.
+        """
+        short_id = self.outfit_slider_short_id(slider_id)
+        record: Dict[str, Any] = {
+            "name": slider_info.get("name", slider_id),
+            "min": float(slider_info.get("min", -50.0)),
+            "max": float(slider_info.get("max", 150.0)),
+            "current_value": float(slider_info.get("current_value", 0.0)),
+            "is_outfit_custom": True,
+            "path": slider_info.get("path", ""),
+            "slider_id": slider_id,
+        }
+        self.save_slider(char_id, outfit_mod_path, short_id, record)
+        return short_id
+
+    def get_outfit_slider(
+        self,
+        char_id: str,
+        outfit_mod_path: str,
+        slider_id: str,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Return the config for one outfit-custom slider, or None.
+        """
+        short_id = self.outfit_slider_short_id(slider_id)
+        return self.get_slider(char_id, outfit_mod_path, short_id)
+
+    def delete_outfit_slider(
+        self,
+        char_id: str,
+        outfit_mod_path: str,
+        slider_id: str,
+    ) -> None:
+        """
+        Delete one outfit-custom slider's config from the JSON.
+        """
+        short_id = self.outfit_slider_short_id(slider_id)
+        self.delete_slider(char_id, outfit_mod_path, short_id)
+
+    def rename_outfit_slider(
+        self,
+        char_id: str,
+        outfit_mod_path: str,
+        old_slider_id: str,
+        new_slider_id: str,
+    ) -> str:
+        """
+        Rename an outfit-custom slider's key in the JSON (short_id changes) and
+        return the new short_id. Other fields are preserved.
+        """
+        old_record = self.get_outfit_slider(char_id, outfit_mod_path, old_slider_id)
+        if not old_record:
+            # Nothing to rename; ensure no stale key left.
+            self.delete_outfit_slider(char_id, outfit_mod_path, old_slider_id)
+            return self.outfit_slider_short_id(new_slider_id)
+        new_record = dict(old_record)
+        new_record["slider_id"] = new_slider_id
+        new_record["name"] = old_record.get("name", new_slider_id)
+        # Remove old, write new
+        self.delete_outfit_slider(char_id, outfit_mod_path, old_slider_id)
+        self.save_outfit_slider(char_id, outfit_mod_path, new_slider_id, new_record)
+        return self.outfit_slider_short_id(new_slider_id)
+
+    def list_outfit_sliders(
+        self,
+        char_id: str,
+        outfit_mod_path: str,
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Return all outfit-custom sliders for one outfit: {slider_id: record}.
+        """
+        data = self._read_file(char_id)
+        out: Dict[str, Dict[str, Any]] = {}
+        for short_id, record in data.get(outfit_mod_path, {}).items():
+            if not isinstance(record, dict):
+                continue
+            if record.get("is_outfit_custom") is not True:
+                continue
+            sid = record.get("slider_id") or self.slider_id_from_short_id(short_id)
+            out[sid] = record
+        return out
+
+    def list_outfit_slider_ids(self, char_id: str) -> List[str]:
+        """
+        Return all outfit-custom slider ids across all outfits for a character.
+        Used for global id-uniqueness checks when adding/editing.
+        """
+        data = self._read_file(char_id)
+        ids: List[str] = []
+        for _mod_path, sliders in data.items():
+            if not isinstance(sliders, dict):
+                continue
+            for short_id, record in sliders.items():
+                if not isinstance(record, dict):
+                    continue
+                if record.get("is_outfit_custom") is not True:
+                    continue
+                sid = record.get("slider_id") or self.slider_id_from_short_id(short_id)
+                if sid and sid not in ids:
+                    ids.append(sid)
+        return ids

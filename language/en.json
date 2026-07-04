@@ -246,6 +246,12 @@
   "btn_outfit_export_obj": "Export Outfit Model (.obj)",
   "tooltip_outfit_link_linked": "Click to unlink — value synced with character slider",
   "tooltip_outfit_link_unlinked": "Click to link — value will sync to character slider value",
+  "dlg_add_outfit_slider_title": "Add Outfit Custom Slider",
+  "dlg_edit_outfit_slider_title": "Edit Outfit Custom Slider",
+  "dlg_add_outfit_slider_select_title": "Select Target Mesh for Outfit Slider",
+  "outfit_add_need_active": "Please activate an outfit first.",
+  "outfit_custom_del_title": "Delete Outfit Custom Slider",
+  "outfit_custom_del_msg": "Delete outfit custom slider \"{name}\"?\nThis removes its deployed mesh, morph data, and config record.",
   "loading_ellipsis": "Loading...",
 
   "outfit_submesh_mismatch_title": "Outfit Submesh Mismatch Warning",
