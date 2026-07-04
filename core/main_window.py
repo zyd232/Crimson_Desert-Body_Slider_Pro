@@ -591,7 +591,7 @@ class MainWindowUIMixin:
             outfit_h_splitter.setStretchFactor(1, 1)
             outfit_sliders_container_layout.addWidget(outfit_h_splitter, stretch=1)
 
-            # Button row: + Add Outfit Custom Slider | Export Outfit Model (.obj)
+            # Button row: Export Outfit Model (.obj) | + Add Outfit Custom Slider
             outfit_btns_row = QHBoxLayout()
             outfit_btns_row.setSpacing(BTN_EXPORT_ROW_SPACING)
             outfit_btns_row.setContentsMargins(*BTN_EXPORT_ROW_MARGINS)
@@ -610,8 +610,8 @@ class MainWindowUIMixin:
             outfit_btn_obj.setEnabled(False)
             outfit_btn_obj.clicked.connect(self._on_outfit_export_obj)
 
-            outfit_btns_row.addWidget(outfit_btn_add, stretch=1)
             outfit_btns_row.addWidget(outfit_btn_obj, stretch=1)
+            outfit_btns_row.addWidget(outfit_btn_add, stretch=1)
             outfit_sliders_container_layout.addLayout(outfit_btns_row)
 
             outer_splitter.addWidget(outfit_sliders_container)
@@ -638,7 +638,7 @@ class MainWindowUIMixin:
         v_layout.addWidget(outer_splitter, stretch=1)
 
         # Bottom buttons: two-row layout
-        #   Row 1: + Add Custom Slider | Export Model (.obj)
+        #   Row 1: Export Model (.obj) | + Add Custom Slider
         #   Row 2: Export as MOD Folder (full width)
         btns_outer = QVBoxLayout()
         btns_outer.setSpacing(BTN_EXPORT_TWO_ROW_SPACING)
@@ -659,8 +659,8 @@ class MainWindowUIMixin:
         # Row 1: Add Custom Slider + Export OBJ (equal width)
         btns_row1 = QHBoxLayout()
         btns_row1.setSpacing(BTN_EXPORT_TWO_ROW_SPACING)
-        btns_row1.addWidget(btn_add_custom, stretch=1)
         btns_row1.addWidget(btn_obj, stretch=1)
+        btns_row1.addWidget(btn_add_custom, stretch=1)
         btns_outer.addLayout(btns_row1)
 
         # Row 2: Export MOD Folder (full width)
