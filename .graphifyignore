@@ -2,6 +2,7 @@
 .backup/
 .github/
 .vscode/
+bs/
 build/
 char_config/
 crash_report/

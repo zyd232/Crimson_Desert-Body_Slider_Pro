@@ -1,6 +1,7 @@
 __pycache__/
 /.backup/
 .vscode/
+/bs/
 /build/
 /char_config/
 /crash_report/

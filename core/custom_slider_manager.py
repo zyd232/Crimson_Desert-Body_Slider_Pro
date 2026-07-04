@@ -3,6 +3,20 @@
 Custom Slider Management Module for Body Slider Pro.
 Handles adding, deleting, editing, renaming, and path resolution for custom morph sliders.
 Encapsulated from BodySlider to keep body_slider_func.py lean.
+
+File-naming convention:
+    Custom slider target meshes are stored under
+    ``target_mesh/{char_id}/custom/`` and their on-disk file name is forced to the
+    slider *local id* (the part of the slider id after the first ``.``, e.g.
+    ``big_nose`` => ``custom/big_nose.obj``). This mirrors the default-slider
+    convention (``target_mesh/{char_id}/{slider_name}.obj``) so that file name and
+    slider id stay coupled across add / edit / reselect-morph operations.
+
+    All target-mesh file placement flows through ``_place_slider_file_by_local_id``,
+    which handles in-place rename of stale-named files, external copies, and safe
+    overwrite of orphan/legacy files (never touching files referenced by other
+    sliders). Previous files left behind by an id rename or extension change are
+    cleaned up by ``_cleanup_slider_old_files``.
 """
 
 import os
@@ -56,19 +70,24 @@ class CustomSliderManager:
         if len(slider_name) > SLIDER_NAME_MAX_LEN:
             slider_name = slider_name[:SLIDER_NAME_MAX_LEN]
 
+        # Generate unique full slider ID FIRST (e.g. "damiane.big_nose") so the
+        # on-disk file name can be forced to the slider local id.
+        existing_ids = existing_ids or list(self.w.sliders_info.keys())
+        full_id = self.w.generate_slider_id(char_id, slider_name, avoid_set=set(existing_ids))
+        local_id = self._local_id_from_full_id(full_id)
+
         # Ensure target directory
         char_custom_dir = self.w._char_custom_dir(char_id)
         os.makedirs(char_custom_dir, exist_ok=True)
 
-        # Copy mesh into project-managed directory
+        # Place mesh into project-managed directory, forcing the file name to
+        # {local_id}{ext} (e.g. big_nose.obj) -- consistent with default sliders.
         try:
-            final_path = self._ensure_file_in_custom_dir(obj_path, char_custom_dir)
+            final_path = self._place_slider_file_by_local_id(
+                obj_path, char_custom_dir, local_id
+            )
         except Exception as e:
             return None, f"Copy failed: {str(e)}"
-
-        # Generate unique full slider ID (e.g. "damiane.big_nose")
-        existing_ids = existing_ids or list(self.w.sliders_info.keys())
-        full_id = self.w.generate_slider_id(char_id, slider_name, avoid_set=set(existing_ids))
 
         # Store relative path (relative to root_dir)
         rel_path = self.to_relative_path(final_path)
@@ -173,15 +192,24 @@ class CustomSliderManager:
         if len(new_name) > SLIDER_NAME_MAX_LEN:
             new_name = new_name[:SLIDER_NAME_MAX_LEN]
 
-        # Ensure file in managed dir
+        # Place file in managed dir, forcing the file name to the new local id.
+        new_local_id = self._local_id_from_full_id(new_full_id)
+        char_custom_dir = self.w._char_custom_dir(self.w.active_char_id)
         try:
-            final_path = self._ensure_file_in_custom_dir(new_path, self.w._char_custom_dir(self.w.active_char_id))
+            final_path = self._place_slider_file_by_local_id(
+                new_path, char_custom_dir, new_local_id, current_sid=full_sid
+            )
         except Exception as e:
             return None, f"Copy failed: {str(e)}"
 
         rel_path = self.to_relative_path(final_path)
 
-        # If ID changed, remove old entry
+        # Clean up the slider's previously-named file(s) in the custom dir
+        # (e.g. when the id -- and thus local id -- changed). Uses old_info which
+        # still holds the previous path; must run before the entry is replaced.
+        self._cleanup_slider_old_files(full_sid, old_info=info, new_abs_path=final_path)
+
+        # If ID changed, remove the old entry now that cleanup is done.
         if new_full_id != full_sid:
             del self.w.sliders_info[full_sid]
 
@@ -220,23 +248,19 @@ class CustomSliderManager:
         if info.get("is_default", False):
             return "Cannot change default slider morph."
 
+        local_id = self._local_id_from_full_id(full_sid)
         char_custom_dir = self.w._char_custom_dir(self.w.active_char_id)
         try:
-            final_path = self._ensure_file_in_custom_dir(new_obj_path, char_custom_dir)
+            final_path = self._place_slider_file_by_local_id(
+                new_obj_path, char_custom_dir, local_id, current_sid=full_sid
+            )
         except Exception as e:
             return f"Copy failed: {str(e)}"
 
-        old_path = info.get("path", "")
-        old_abs = self.to_absolute_path(old_path)
-
-        # Clean up old file if safe
-        if old_abs and os.path.isabs(old_abs) and os.path.exists(old_abs):
-            if self._is_canonical_slider_path(full_sid, old_abs):
-                if not self._is_file_referenced_globally(old_abs, exclude_sid=full_sid):
-                    try:
-                        os.remove(old_abs)
-                    except OSError:
-                        pass
+        # Remove the slider's previously-named file(s) (any extension) once the
+        # new file is in place. local_id is unchanged, so this only matters when
+        # the mesh extension changed (e.g. .obj -> .pac).
+        self._cleanup_slider_old_files(full_sid, old_info=info, new_abs_path=final_path)
 
         info["path"] = self.to_relative_path(final_path)
         return None
@@ -276,6 +300,118 @@ class CustomSliderManager:
         return os.path.abspath(os.path.join(self.w.root_dir, saved_path))
 
     # ===================== INTERNAL HELPERS =====================
+
+    def _local_id_from_full_id(self, full_sid: str) -> str:
+        """Extract the local id portion (after the first '.') of a slider id."""
+        if not full_sid or "." not in full_sid:
+            return full_sid or ""
+        return full_sid.split(".", 1)[1]
+
+    def _place_slider_file_by_local_id(
+        self,
+        src: str,
+        target_dir: str,
+        local_id: str,
+        current_sid: Optional[str] = None,
+    ) -> str:
+        """
+        Force the target mesh file name to ``{local_id}{ext}`` inside target_dir.
+
+        This couples the on-disk file name with the slider local id, matching the
+        default-slider convention (``target_mesh/{char_id}/{slider_name}.obj``)
+        so that custom sliders no longer keep their original source file name.
+
+        Behaviour:
+        - ext is taken from the *source* file (preserves .obj / .pac).
+        - If the source already equals the desired destination, keep as-is.
+        - If the source lives inside target_dir (same slider's stale-named file),
+          rename it in-place with ``shutil.move`` (avoids leaving an orphan).
+        - Otherwise the source is external; copy it into place.
+        - On conflict (dest exists and dest != src):
+            * If not referenced globally (exclude current_sid) => orphan/legacy,
+              delete then place (overwrite).
+            * If referenced elsewhere => rare (local ids are unique); fall back to
+              a ``_dupN`` suffix so we never corrupt another slider's data.
+
+        Returns the final absolute path.
+        """
+        os.makedirs(target_dir, exist_ok=True)
+        if not local_id:
+            local_id = "slider"
+        src_abs = os.path.abspath(src)
+        ext = os.path.splitext(os.path.basename(src_abs))[1].lower()
+        if not ext:
+            ext = ".obj"
+        dest = os.path.join(target_dir, local_id + ext)
+        target_dir_abs = os.path.abspath(target_dir)
+
+        # 1) Already correctly named in place
+        if os.path.abspath(dest) == src_abs:
+            return src_abs
+
+        # 2) Collision handling before writing
+        if os.path.exists(dest):
+            # If the existing dest is the source itself we already returned above,
+            # so here dest is a *different* file occupying the target name.
+            if self._is_file_referenced_globally(dest, exclude_sid=current_sid):
+                # Referenced by another slider: do not overwrite. Fall back to a
+                # uniquely-named copy so we never break foreign data.
+                i = 1
+                while True:
+                    candidate = os.path.join(target_dir, f"{local_id}_dup{i}{ext}")
+                    if not os.path.exists(candidate):
+                        dest = candidate
+                        break
+                    i += 1
+            else:
+                # Orphan / legacy file: safe to remove before placing our file.
+                try:
+                    os.remove(dest)
+                except OSError:
+                    pass
+
+        # 3) Place the file: move if inside target_dir (in-place rename), else copy
+        if src_abs.startswith(target_dir_abs) and os.path.exists(src_abs):
+            shutil.move(src_abs, dest)
+        else:
+            shutil.copy2(src_abs, dest)
+
+        return os.path.abspath(dest)
+
+    def _cleanup_slider_old_files(
+        self,
+        full_sid: str,
+        old_info: Dict[str, Any],
+        new_abs_path: str,
+    ) -> None:
+        """
+        Remove a slider's previously-used mesh file(s) after a new file has been
+        placed. Used by edit_custom_slider (id renamed -> old-named file) and
+        change_slider_morph (extension changed -> old-extension file).
+
+        - Derives the old file path from old_info["path"].
+        - Only removes it when it differs from new_abs_path, is canonical to the
+          active character's target_mesh dir, and is not referenced by any other
+          slider (exclude current_sid).
+        - No-ops safely if there is nothing to clean.
+        """
+        old_path = old_info.get("path", "") if isinstance(old_info, dict) else ""
+        old_abs = self.to_absolute_path(old_path)
+        new_abs_norm = os.path.abspath(new_abs_path) if new_abs_path else ""
+
+        if not old_abs or not os.path.isabs(old_abs) or not os.path.exists(old_abs):
+            return
+        if os.path.abspath(old_abs) == new_abs_norm:
+            return
+        if not self._is_canonical_slider_path(full_sid, old_abs):
+            return
+        if self._is_file_referenced_globally(old_abs, exclude_sid=full_sid):
+            return
+
+        try:
+            os.remove(old_abs)
+        except OSError:
+            pass
 
     def _ensure_file_in_custom_dir(self, src: str, target_dir: str) -> str:
         """

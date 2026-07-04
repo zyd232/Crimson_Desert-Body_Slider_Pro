@@ -11,16 +11,24 @@ Body Slider Pro - Outfit 索引重建模块
   "app_version": "x.y.z",
   "target_body_folders": {
     "target_mesh/{char_id}/{slider_name}.obj": "exported_outfit/{char_id}/{slider_name}",
+    "target_mesh/{char_id}/custom/{local_id}.obj": "exported_outfit/{char_id}/custom/{local_id}",
     ...
   },
   "outfits": {
     "original_outfit 中文件的相对路径": [
       "exported_outfit/{char_id}/{slider_name}/...",
+      "exported_outfit/{char_id}/custom/{local_id}/...",
       ...
     ],
     ...
   }
 }
+
+注意：滑块段有两类（与 outfit_manager.py / body_slider_func.py 的 slider_segment
+提取逻辑保持一致）：
+  - 默认滑块: "{slider_name}"          （单层）
+  - 自定义滑块: "custom/{local_id}"    （多层）
+两者在 target_mesh 与 exported_outfit 中的相对位置不同，重建时必须分别处理。
 """
 
 import json
@@ -58,6 +66,27 @@ def _normalize_path(p: str) -> str:
     return p.replace("\\", "/")
 
 
+def _find_target_mesh_file(target_mesh_dir: str, subdir: str, name: str) -> Optional[str]:
+    """
+    在 target_mesh/{char_id}/ 下查找滑块目标网格文件。
+
+    - subdir == ""      : 默认滑块，查找 target_mesh/{char_id}/{name}[.obj|.pac]
+    - subdir == "custom": 自定义滑块，查找 target_mesh/{char_id}/custom/{name}[.obj|.pac]
+
+    返回找到的文件绝对路径，未找到返回 None。
+    """
+    base_dir = os.path.join(target_mesh_dir, subdir) if subdir else target_mesh_dir
+    base = os.path.join(base_dir, name)
+
+    if os.path.isfile(base):
+        return base
+    for ext in (".obj", ".pac"):
+        candidate = base + ext
+        if os.path.isfile(candidate):
+            return candidate
+    return None
+
+
 def rebuild_outfit_index(root_dir: str, char_id: str) -> Optional[Dict]:
     """
     根据文件系统重建 exported_outfit/{char_id}/outfit_index.json。
@@ -71,7 +100,7 @@ def rebuild_outfit_index(root_dir: str, char_id: str) -> Optional[Dict]:
     返回重建后的索引字典，失败返回 None。
     """
     root_dir = os.path.abspath(root_dir)
-    
+
     # 关键路径
     exported_outfit_dir = os.path.join(root_dir, "exported_outfit", char_id)
     original_outfit_dir = os.path.join(root_dir, "original_outfit", char_id)
@@ -100,29 +129,51 @@ def rebuild_outfit_index(root_dir: str, char_id: str) -> Optional[Dict]:
     }
 
     # ---- 1) 构建 target_body_folders 映射 ----
-    # 扫描 exported_outfit/{char_id}/ 下的一级目录，每个目录名对应一个滑块
-    # 然后在 target_mesh/{char_id}/ 中寻找对应的目标文件
+    # 扫描 exported_outfit/{char_id}/ 下的滑块导出目录，再到 target_mesh/{char_id}/
+    # 中寻找对应的目标网格文件，建立 target_mesh_file -> output_folder 的映射。
+    #
+    # 滑块导出目录有两类（与 outfit_manager.py / body_slider_func.py 中
+    # slider_segment 的提取逻辑保持一致）：
+    #   - 默认滑块: exported_outfit/{char_id}/{slider_name}/
+    #               对应目标网格: target_mesh/{char_id}/{slider_name}.{obj|pac}
+    #   - 自定义滑块: exported_outfit/{char_id}/custom/{local_id}/
+    #               对应目标网格: target_mesh/{char_id}/custom/{local_id}.{obj|pac}
+    # slider_segment = "custom/{local_id}" 是多层级，不能按单层目录处理。
     try:
         for first_level_name in os.listdir(exported_outfit_dir):
             first_level_path = os.path.join(exported_outfit_dir, first_level_name)
             if not os.path.isdir(first_level_path):
                 continue
 
-            # 在 target_mesh/{char_id}/ 中寻找匹配的文件
-            # 文件名可能是 {first_level_name}.obj 或 {first_level_name}.pac
-            tb_file_found = None
-            tb_file_abs = os.path.join(target_mesh_dir, first_level_name)
-            
-            if os.path.isfile(tb_file_abs):
-                tb_file_found = tb_file_abs
+            if first_level_name == "custom":
+                # 自定义滑块容器目录：枚举其下每个 local_id 子目录
+                try:
+                    local_ids = sorted(os.listdir(first_level_path))
+                except OSError:
+                    local_ids = []
+                for local_id in local_ids:
+                    local_path = os.path.join(first_level_path, local_id)
+                    if not os.path.isdir(local_path):
+                        continue
+                    tb_file_found = _find_target_mesh_file(
+                        target_mesh_dir, "custom", local_id
+                    )
+                    if tb_file_found is None:
+                        continue
+                    target_body_file_rel = _normalize_path(
+                        os.path.relpath(tb_file_found, root_dir)
+                    )
+                    output_folder_rel = _normalize_path(
+                        os.path.relpath(local_path, root_dir)
+                    )
+                    new_index["target_body_folders"][target_body_file_rel] = output_folder_rel
             else:
-                for ext in (".obj", ".pac"):
-                    candidate = tb_file_abs + ext
-                    if os.path.isfile(candidate):
-                        tb_file_found = candidate
-                        break
-
-            if tb_file_found:
+                # 默认滑块：一级目录名即为 slider_name
+                tb_file_found = _find_target_mesh_file(
+                    target_mesh_dir, "", first_level_name
+                )
+                if tb_file_found is None:
+                    continue
                 target_body_file_rel = _normalize_path(
                     os.path.relpath(tb_file_found, root_dir)
                 )
@@ -134,9 +185,17 @@ def rebuild_outfit_index(root_dir: str, char_id: str) -> Optional[Dict]:
         logger.error("Error scanning target_body_folders: %s", e, exc_info=True)
 
     # ---- 2) 构建 outfits 映射 ----
-    # 扫描 exported_outfit/{char_id}/{slider_name}/ 下的所有 .obj/.pac 文件
+    # 扫描 exported_outfit/{char_id}/{slider_segment}/ 下的所有 .obj/.pac 文件
     # 对于每个导出文件，尝试在 original_outfit/{char_id}/ 中找到对应的原始文件
     # 建立 original_rel -> [exported_rel, ...] 的映射
+    #
+    # 滑块段（slider_segment）有两类：
+    #   - 默认滑块: "{slider_name}" （单层），导出路径形如
+    #     exported_outfit/{cid}/{slider_name}/{mod_dir}/{file}
+    #     -> 剥离 1 段后 outfit_rel = {mod_dir}/{file}
+    #   - 自定义滑块: "custom/{local_id}" （两层），导出路径形如
+    #     exported_outfit/{cid}/custom/{local_id}/{mod_dir}/{file}
+    #     -> 剥离 2 段后 outfit_rel = {mod_dir}/{file}（与 original_outfit 结构一致）
     try:
         for root, dirs, files in os.walk(exported_outfit_dir):
             # 跳过索引文件本身
@@ -157,8 +216,19 @@ def rebuild_outfit_index(root_dir: str, char_id: str) -> Optional[Dict]:
                 if len(rel_parts) < 2:
                     continue
 
-                # rel_parts[0] 是 slider_name, rel_parts[1:] 是 outfit 文件的相对路径
-                outfit_rel = _normalize_path("/".join(rel_parts[1:]))
+                # 剥离滑块段得到 outfit 文件相对滑块根的路径。
+                # 与 outfit_manager.py / body_slider_func.py 的 slider_segment 提取
+                # 逻辑保持一致：custom/{local_id} 是多层级，需剥离两段。
+                if rel_parts[0] == "custom" and len(rel_parts) >= 3:
+                    # rel_parts[0:2] == ["custom", "{local_id}"]
+                    outfit_rel = _normalize_path("/".join(rel_parts[2:]))
+                else:
+                    # 默认滑块：rel_parts[0] 是 {slider_name}
+                    outfit_rel = _normalize_path("/".join(rel_parts[1:]))
+
+                if not outfit_rel:
+                    # 滑块段之后没有 outfit 文件相对路径，跳过
+                    continue
 
                 # 在 original_outfit 中寻找对应的原始文件（不考虑扩展名）
                 orig_base, _ = os.path.splitext(outfit_rel)
@@ -183,7 +253,7 @@ def rebuild_outfit_index(root_dir: str, char_id: str) -> Optional[Dict]:
                 # 添加到 outfits 映射
                 if original_outfit_rel not in new_index["outfits"]:
                     new_index["outfits"][original_outfit_rel] = []
-                
+
                 if exported_rel not in new_index["outfits"][original_outfit_rel]:
                     new_index["outfits"][original_outfit_rel].append(exported_rel)
 

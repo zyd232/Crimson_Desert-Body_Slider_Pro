@@ -63,6 +63,11 @@ from core.pack_import_handler import (
     overwrite_outfit_data,
 )
 from core.outfit_index import rebuild_outfit_index
+from core.pack_migration import (
+    migrate_legacy_custom_sliders,
+    needs_app_migration,
+    needs_outfitter_migration,
+)
 
 
 class ZipExtractWorker(QObject):
@@ -318,6 +323,9 @@ class PackHandlerMixin:
         pack_version = "0.0.0"
         pack_type = "app"  # "app" or "outfitter"
         pack_outfit_char_ids: Set[str] = set()  # chars with outfit data in ZIP
+        # Whether the pack predates the custom-slider file-name renaming; if so
+        # the extracted temp_dir is migrated before files are moved into place.
+        need_legacy_slider_migration = False
 
         try:
             with zipfile.ZipFile(zip_path, "r") as zf:
@@ -348,7 +356,20 @@ class PackHandlerMixin:
                 else:
                     pack_type = "app"
 
-                pack_version = str(pack_info.get("app_version", "0.0.0"))
+                # Read the version that matches the pack type so legacy-slider
+                # migration thresholds can be evaluated correctly. Outfitter packs
+                # carry `outfitter_version`; Body Slider Pro packs carry `app_version`.
+                if pack_type == "outfitter":
+                    pack_version = str(pack_info.get("outfitter_version", "0.0.0"))
+                else:
+                    pack_version = str(pack_info.get("app_version", "0.0.0"))
+
+                # Decide whether this pack predates the custom-slider file-name
+                # renaming convention and needs on-import migration.
+                if pack_type == "outfitter":
+                    need_legacy_slider_migration = needs_outfitter_migration(pack_version)
+                else:
+                    need_legacy_slider_migration = needs_app_migration(pack_version)
 
                 char_ids = pack_info.get("character_ids", None)
                 if isinstance(char_ids, list) and len(char_ids) > 0:
@@ -572,6 +593,7 @@ class PackHandlerMixin:
                 outfit_choice_pending_ids=outfit_choice_pending_ids,
                 pack_type=pack_type, saved_camera=saved_camera,
                 saved_wireframe_enabled=saved_wireframe_enabled,
+                need_legacy_slider_migration=need_legacy_slider_migration,
             )
 
         self._extract_worker.finished.connect(on_extract_finished)
@@ -594,6 +616,7 @@ class PackHandlerMixin:
         pack_type,
         saved_camera,
         saved_wireframe_enabled,
+        need_legacy_slider_migration=False,
     ):
         """Continue pack import flow after ZIP extraction completes."""
         root_dir = self.root_dir
@@ -615,6 +638,33 @@ class PackHandlerMixin:
                 except Exception:
                     pack_char_configs[cid] = {}
             pack_char_sliders[cid] = sliders_cfg
+
+        # ------------------------------------------------------------------
+        # Legacy custom-slider migration: rename target-mesh files / exported
+        # outfit folders to the slider local id and rewrite cfg + index paths.
+        # Done on temp_dir before any move/merge so downstream logic is unaware.
+        # ------------------------------------------------------------------
+        if need_legacy_slider_migration:
+            for cid in selected_ids:
+                try:
+                    migrate_legacy_custom_sliders(temp_dir, cid, root_dir)
+                except Exception as e:
+                    import logging as _logging
+                    _logging.getLogger("BodySlider").warning(
+                        "Legacy slider migration failed for %s: %s", cid, e
+                    )
+            # Re-read the (possibly rewritten) configs so merge/overwrite flows
+            # see the migrated paths.
+            for cid in selected_ids:
+                cfg_path = os.path.join(temp_dir, "char_config", f"{cid}.json")
+                if os.path.exists(cfg_path):
+                    try:
+                        with open(cfg_path, "r", encoding="utf-8") as f:
+                            data = json.load(f)
+                        pack_char_configs[cid] = data
+                        pack_char_sliders[cid] = data.get("sliders", {}) or {}
+                    except Exception:
+                        pass
 
         # ================================================================
         # NEW OUTFIT-AWARE IMPORT FLOW
