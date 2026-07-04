@@ -161,6 +161,31 @@ class OutfitHost:
     def outfit_slider_mapping(self, v: Dict[str, Optional[str]]):
         self._app.outfit_slider_mapping = v
 
+    # Outfit UV / normal / material maps
+    @property
+    def outfit_uv_map(self) -> Dict[str, np.ndarray]:
+        return self._app.outfit_uv_map
+
+    @outfit_uv_map.setter
+    def outfit_uv_map(self, v: Dict[str, np.ndarray]):
+        self._app.outfit_uv_map = v
+
+    @property
+    def outfit_normal_map(self) -> Dict[str, np.ndarray]:
+        return self._app.outfit_normal_map
+
+    @outfit_normal_map.setter
+    def outfit_normal_map(self, v: Dict[str, np.ndarray]):
+        self._app.outfit_normal_map = v
+
+    @property
+    def outfit_material_map(self) -> Dict[str, str]:
+        return self._app.outfit_material_map
+
+    @outfit_material_map.setter
+    def outfit_material_map(self, v: Dict[str, str]):
+        self._app.outfit_material_map = v
+
     # Outfit config manager
     @property
     def outfit_config_mgr(self):
@@ -289,6 +314,9 @@ class OutfitManager:
         h.outfit_original_points = {}
         h.outfit_faces = {}
         h.outfit_morph_data = {}
+        h.outfit_uv_map = {}
+        h.outfit_normal_map = {}
+        h.outfit_material_map = {}
 
         if outfit_pac_mesh:
             for sm in outfit_pac_mesh.submeshes:
@@ -296,6 +324,16 @@ class OutfitManager:
                     h.outfit_original_points[sm.name] = np.array(sm.vertices, dtype=np.float32)
                 if sm.faces is not None and len(sm.faces) > 0:
                     h.outfit_faces[sm.name] = np.array(sm.faces, dtype=np.int32)
+                # UV coordinates
+                if sm.uvs and len(sm.uvs) > 0:
+                    h.outfit_uv_map[sm.name] = np.asarray(sm.uvs, dtype=np.float64)
+                # Normals
+                if sm.normals and len(sm.normals) > 0:
+                    h.outfit_normal_map[sm.name] = np.asarray(sm.normals, dtype=np.float64)
+                # Material name
+                mat_name = getattr(sm, "material", None) or ""
+                if mat_name:
+                    h.outfit_material_map[sm.name] = mat_name
         elif outfit_obj_data:
             obj_name = os.path.splitext(os.path.basename(original_path))[0]
             h.outfit_original_points[obj_name] = outfit_obj_data["vertices"]
@@ -408,6 +446,9 @@ class OutfitManager:
         h.outfit_original_points = {}
         h.outfit_morph_data = {}
         h.outfit_faces = {}
+        h.outfit_uv_map = {}
+        h.outfit_normal_map = {}
+        h.outfit_material_map = {}
 
     # ---------- unload all ----------
 

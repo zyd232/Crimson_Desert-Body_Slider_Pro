@@ -569,12 +569,59 @@ class MainWindowUIMixin:
             outfit_sliders_panel.outfitSliderValueChanged.connect(
                 self._on_outfit_slider_value_changed
             )
-            # Add the two independent panels directly to outer_splitter
-            outer_splitter.addWidget(outfit_sliders_panel.default_panel)
-            outer_splitter.addWidget(outfit_sliders_panel.custom_panel)
+            outfit_sliders_panel.outfitAddSliderRequested.connect(
+                self._on_outfit_add_slider
+            )
+            outfit_sliders_panel.outfitExportObjRequested.connect(
+                self._on_outfit_export_obj
+            )
+
+            # Wrapper container for outfit sliders + buttons at the bottom
+            outfit_sliders_container = QWidget()
+            outfit_sliders_container_layout = QVBoxLayout(outfit_sliders_container)
+            outfit_sliders_container_layout.setContentsMargins(0, 0, 0, 0)
+            outfit_sliders_container_layout.setSpacing(4)
+
+            # Horizontal splitter for the two outfit slider panels
+            outfit_h_splitter = QSplitter(Qt.Orientation.Horizontal)
+            outfit_h_splitter.setChildrenCollapsible(False)
+            outfit_h_splitter.addWidget(outfit_sliders_panel.default_panel)
+            outfit_h_splitter.addWidget(outfit_sliders_panel.custom_panel)
+            outfit_h_splitter.setStretchFactor(0, 1)
+            outfit_h_splitter.setStretchFactor(1, 1)
+            outfit_sliders_container_layout.addWidget(outfit_h_splitter, stretch=1)
+
+            # Button row: + Add Outfit Slider | Export Outfit Model (.obj)
+            outfit_btns_row = QHBoxLayout()
+            outfit_btns_row.setSpacing(BTN_EXPORT_ROW_SPACING)
+            outfit_btns_row.setContentsMargins(*BTN_EXPORT_ROW_MARGINS)
+
+            outfit_btn_add = SmoothHoverButton(
+                self.T.get("btn_outfit_add_slider", "+ Add Outfit Slider")
+            )
+            outfit_btn_add.setObjectName("btn_base_primary")
+            outfit_btn_add.setEnabled(False)
+            outfit_btn_add.clicked.connect(self._on_outfit_add_slider)
+
+            outfit_btn_obj = SmoothHoverButton(
+                self.T.get("btn_outfit_export_obj", "Export Outfit Model (.obj)")
+            )
+            outfit_btn_obj.setObjectName("btn_base_primary")
+            outfit_btn_obj.setEnabled(False)
+            outfit_btn_obj.clicked.connect(self._on_outfit_export_obj)
+
+            outfit_btns_row.addWidget(outfit_btn_add, stretch=1)
+            outfit_btns_row.addWidget(outfit_btn_obj, stretch=1)
+            outfit_sliders_container_layout.addLayout(outfit_btns_row)
+
+            outer_splitter.addWidget(outfit_sliders_container)
+
             page.outfit_sliders_panel = outfit_sliders_panel
             page.outfit_default_sliders_panel = outfit_sliders_panel.default_panel
             page.outfit_custom_sliders_panel = outfit_sliders_panel.custom_panel
+            page.outfit_sliders_container = outfit_sliders_container
+            page.outfit_btn_add = outfit_btn_add
+            page.outfit_btn_obj = outfit_btn_obj
             self.outfit_sliders_panel = outfit_sliders_panel
 
             # Default shown together with Outfits panel
@@ -913,16 +960,21 @@ class MainWindowUIMixin:
                 return
 
             # Outer splitter layout:
-            #   has_outfits=True: [Sliders Container] [Outfits] [Outfit Default] [Outfit Custom] = 4 children
+            #   has_outfits=True: [Sliders Container] [Outfits] [Outfit Sliders Container] = 3 children
             #     Sliders Container contains 2 panels (Default+Custom) via inner splitter
-            #     So 4 children represent 5 equal panels
+            #     Outfit Sliders Container contains 2 panels (Outfit Default+Custom) via inner splitter
+            #     So 3 children represent 5 equal panels
             #   has_outfits=False: [Sliders Container] = 1 child
-            if has_outfits and outer_splitter.count() >= 4:
+            if has_outfits and outer_splitter.count() >= 3:
                 # Five equal panels within outer_splitter (each = total/5)
                 # Sliders container = 2 panels = 2/5 of outer_splitter width
+                # Outfits panel = 1 panel = 1/5
+                # Outfit Sliders container = 2 panels = 2/5
                 panel_w = total // 5
                 sliders_w = panel_w * 2
-                sizes = [sliders_w, panel_w, panel_w, panel_w]
+                outfits_w = panel_w
+                outfit_sliders_w = panel_w * 2
+                sizes = [sliders_w, outfits_w, outfit_sliders_w]
                 # Adjust last element to account for rounding
                 sizes[-1] = total - sum(sizes[:-1])
                 outer_splitter.setSizes(sizes)
@@ -1255,3 +1307,11 @@ class MainWindowUIMixin:
             self.outfit_slider_values[outfit_key] = value
             if hasattr(self, "outfit_mgr") and self.outfit_mgr:
                 self.outfit_mgr.update_outfit_morphs()
+
+    def _on_outfit_add_slider(self):
+        """Handle outfit add slider button click (to be implemented)."""
+        pass
+
+    def _on_outfit_export_obj(self):
+        """Handle outfit export OBJ button click."""
+        self.save_outfit_obj()

@@ -631,6 +631,10 @@ BTN_EXPORT_TWO_ROW_SPACING = 6              # spacing within each row and betwee
 # -- Outfits panel bottom margin (matches button row bottom margin so Outfits bottom aligns with buttons bottom) --
 OUTFIT_PANEL_BOTTOM_MARGIN = 8
 
+# -- Outfit Sliders panel button row layout --
+OUTFIT_SLIDERS_BTN_ROW_MARGINS = (0, 4, 0, 8)  # (left, top, right, bottom)
+OUTFIT_SLIDERS_BTN_ROW_SPACING = 6
+
 # -- Sort dialog scroll area --
 
 SORT_SCROLL_STYLE = f"""
@@ -1005,6 +1009,11 @@ QPushButton#btn_base_primary:hover {{
 }}
 QPushButton#btn_base_primary:pressed {{
     background-color: {COLOR_BG_PRESS};
+}}
+QPushButton#btn_base_primary:disabled {{
+    color: {COLOR_TEXT_SEPIA};
+    background-color: rgba(53,36,28,100);
+    border-color: rgba(81,57,41,100);
 }}
 
 /* Primary green button */

@@ -271,6 +271,8 @@
   "group_outfit_default": "服装默认滑块",
   "group_outfit_custom": "服装自定义滑块",
   "no_outfit_sliders": "暂无服装滑块",
+  "btn_outfit_add_slider": "+ 添加服装滑块",
+  "btn_outfit_export_obj": "导出服装模型 (.obj)",
   "tooltip_outfit_link_linked": "点击断开 — 当前数值与角色滑块同步",
   "tooltip_outfit_link_unlinked": "点击链接 — 数值将同步至角色滑块",
   "loading_ellipsis": "加载中...",

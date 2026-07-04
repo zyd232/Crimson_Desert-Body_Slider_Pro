@@ -196,7 +196,7 @@ class _OutfitSingleSlidersPanel(QWidget):
     for six-panel equal-width layout.
 
     This class holds the QGroupBox + QScrollArea structure for one column.
-    The companion _OutfitSlidersManager handles data distribution and signals.
+    The companion OutfitSlidersPanel handles data distribution and signals.
     """
 
     def __init__(
@@ -215,7 +215,7 @@ class _OutfitSingleSlidersPanel(QWidget):
         )
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, OUTFIT_PANEL_BOTTOM_MARGIN)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         group = QGroupBox(title)
@@ -231,7 +231,7 @@ class _OutfitSingleSlidersPanel(QWidget):
         scroll_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         scroll.setWidget(scroll_content)
-        group_layout.addWidget(scroll)
+        group_layout.addWidget(scroll, stretch=1)
         layout.addWidget(group, stretch=1)
 
         # Expose for manager
@@ -250,9 +250,15 @@ class OutfitSlidersPanel(QWidget):
     Signals:
         outfitSliderValueChanged(outfit_key: str, value: float, char_slider_id: str or None)
             Emitted when an outfit slider's value changes.
+        outfitAddSliderRequested()
+            Emitted when the "+ Add Outfit Slider" button is clicked.
+        outfitExportObjRequested()
+            Emitted when the "Export Outfit Model (.obj)" button is clicked.
     """
 
     outfitSliderValueChanged = pyqtSignal(str, float, object)
+    outfitAddSliderRequested = pyqtSignal()
+    outfitExportObjRequested = pyqtSignal()
 
     def __init__(
         self,

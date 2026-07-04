@@ -734,6 +734,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         # Re-render outfit mesh with correct link/unlink slider values
         # (activate_outfit uses sliders_info directly without link/unlink awareness)
         self.outfit_mgr.update_outfit_morphs()
+        # Enable outfit buttons
+        self._set_outfit_buttons_enabled(True)
 
     def _load_outfit_sliders(self, mod_path: str):
         """
@@ -756,6 +758,20 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         outfit_sliders_panel = getattr(self, "outfit_sliders_panel", None)
         if outfit_sliders_panel:
             outfit_sliders_panel.clear_sliders(show_empty=True)
+        # Disable outfit buttons
+        self._set_outfit_buttons_enabled(False)
+
+    def _set_outfit_buttons_enabled(self, enabled: bool):
+        """Enable or disable outfit action buttons based on outfit activation state."""
+        page = self._current_page()
+        if not page:
+            return
+        btn_add = getattr(page, "outfit_btn_add", None)
+        btn_obj = getattr(page, "outfit_btn_obj", None)
+        if btn_add is not None:
+            btn_add.setEnabled(enabled)
+        if btn_obj is not None:
+            btn_obj.setEnabled(enabled)
 
     def _on_outfits_unload_all(self):
         char_id = self.active_char_id or ""
@@ -1790,6 +1806,109 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
 
         from core.obj_exporter import export_mesh_data_to_obj
         export_mesh_data_to_obj(morphed_meshes, material_map, uv_map, normal_map, obj_path)
+
+    # ---------- export outfit OBJ ----------
+
+    def _get_effective_outfit_sliders_info(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Build effective sliders_info considering outfit link/unlink state.
+        Unlinked outfit sliders use their own current_value instead of the
+        character slider value.
+        """
+        sliders_info = self.sliders_info
+        link_states = getattr(self, "outfit_link_states", {}) or {}
+        slider_values = getattr(self, "outfit_slider_values", {}) or {}
+        slider_mapping = getattr(self, "outfit_slider_mapping", {}) or {}
+
+        if not link_states:
+            return sliders_info
+
+        effective_info: Dict[str, Dict[str, Any]] = dict(sliders_info)
+        for outfit_key, linked in link_states.items():
+            if not linked:
+                char_sid = slider_mapping.get(outfit_key)
+                if char_sid and char_sid in effective_info:
+                    val = slider_values.get(outfit_key, 0.0)
+                    entry = dict(effective_info[char_sid])
+                    entry["current_value"] = val
+                    effective_info[char_sid] = entry
+        return effective_info
+
+    def _export_current_outfit_to_obj(self, obj_path: str):
+        """
+        Export the currently active outfit mesh (with morphing applied) to .obj.
+        Uses outfit_original_points, outfit_morph_data, and considers link/unlink state.
+        """
+        if not self.outfit_original_points:
+            return
+
+        material_map: Dict[str, str] = self.outfit_material_map or {}
+        uv_map: Dict[str, np.ndarray] = self.outfit_uv_map or {}
+        normal_map: Dict[str, np.ndarray] = self.outfit_normal_map or {}
+
+        # Build effective sliders_info considering link/unlink state
+        effective_info = self._get_effective_outfit_sliders_info()
+
+        morphed_meshes: Dict[str, Dict[str, np.ndarray]] = {}
+        outfit_morph_data = self.outfit_morph_data or {}
+
+        for name, orig in self.outfit_original_points.items():
+            morphed = orig.copy()
+
+            for sid, info in effective_info.items():
+                md = outfit_morph_data.get(sid)
+                cv = info.get("current_value", 0.0)
+                if md is not None and name in md:
+                    morphed += md[name] * (cv / 100.0)
+
+            morphed_meshes[name] = {
+                "vertices": morphed,
+                "faces": self.outfit_faces.get(name, np.array([])),
+            }
+
+        from core.obj_exporter import export_mesh_data_to_obj
+        export_mesh_data_to_obj(morphed_meshes, material_map, uv_map, normal_map, obj_path)
+
+    def save_outfit_obj(self):
+        """Export the active outfit mesh to .obj file."""
+        page = self._current_page()
+        btn_obj = getattr(page, "outfit_btn_obj", None) if page else None
+        if not btn_obj:
+            return
+        btn_obj.setText(self.T["processing"])
+        btn_obj.setEnabled(False)
+        QApplication.processEvents()
+
+        # Filename from original_outfit file (remove extension, add .obj)
+        original_path = self.active_outfit_path or ""
+        base_name = os.path.splitext(os.path.basename(original_path))[0]
+
+        out_dir = os.path.join(self.root_dir, "exported_mesh")
+        if not os.path.exists(out_dir):
+            os.makedirs(out_dir)
+        out_path = os.path.join(out_dir, f"{base_name}.obj")
+
+        try:
+            self._export_current_outfit_to_obj(out_path)
+            msg = DarkMessageBox(self)
+            msg.setWindowTitle(self.T["msg_success"])
+            msg.setText(f"{self.T['msg_save_to']}\n{out_path}")
+            msg.setIcon(QMessageBox.Icon.Information)
+
+            ok_btn = msg.addButton(self.T["btn_ok"], QMessageBox.ButtonRole.AcceptRole)
+            open_btn = msg.addButton(self.T["btn_open_folder"], QMessageBox.ButtonRole.ActionRole)
+
+            ok_btn.clicked.connect(lambda: setattr(msg, "_clicked_button", ok_btn))
+            open_btn.clicked.connect(lambda: setattr(msg, "_clicked_button", open_btn))
+
+            msg.exec()
+            if msg.clickedButton() is open_btn:
+                subprocess.Popen(["explorer", os.path.dirname(out_path)])
+        except Exception as e:
+            show_critical(self, self.T["msg_error"], str(e))
+        finally:
+            btn_obj.setText(self.T.get("btn_outfit_export_obj", "Export Outfit Model (.obj)"))
+            btn_obj.setEnabled(True)
 
     # ---------- ModExportWorker (async MOD export) ----------
 
