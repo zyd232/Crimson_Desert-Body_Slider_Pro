@@ -1,5 +1,6 @@
 __pycache__/
 /.backup/
+.github/
 .vscode/
 /bs/
 /build/
@@ -13,6 +14,7 @@ graphify-out/
 /original_outfit/
 /outfit_config/
 /plans/
+run_graphify.bat
 /target_mesh/
 /test/
 /tests/
