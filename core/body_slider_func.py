@@ -1945,7 +1945,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         def __init__(self, char_id: str, original_pac: str, mod_path: str,
                      mod_dir: str, files_dir: str, char_name: str,
                      sliders_info: Dict[str, Dict], root_dir: str,
-                     outfit_config_all: Dict[str, Dict[str, Any]] = None):
+                     outfit_config_all: Dict[str, Dict[str, Any]] = None,
+                     mod_folder_name: str = ""):
             super().__init__()
             self.char_id = char_id
             self.original_pac = original_pac
@@ -1958,6 +1959,8 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             # Full outfit config JSON data: {mod_path: {short_id: slider_info}}
             # Each outfit's slider values are looked up per-outfit during export.
             self.outfit_config_all = outfit_config_all or {}
+            # User-provided MOD folder name, used for mod.json title/name
+            self.mod_folder_name = mod_folder_name
             self._cancelled = False
             self._executor = None
             # Pre-computed target mesh cache: {target_file_path: {submesh_name: vertices_array}}
@@ -2526,15 +2529,15 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                 # ---- Step 3: Generate mod.json (95%-100%) ----
                 self.progress.emit("Generating mod.json...", 95)
 
-                names_list = self.char_name
+                mod_folder_name = self.mod_folder_name or self.char_name
 
                 mod_json = {
                     "modinfo": {
-                        "title": f"Body Slider MOD - {names_list}",
-                        "name": f"Body Slider MOD - {names_list}",
+                        "title": mod_folder_name,
+                        "name": mod_folder_name,
                         "author": "Body Slider Pro - by zyd232",
                         "version": "1.0.0",
-                        "description": f"Model modifications for {names_list}",
+                        "description": f"Model modifications for {mod_folder_name}",
                         "generator": "Body Slider Pro",
                         "nexus_url": "https://www.nexusmods.com/crimsondesert/mods/2727",
                     },
@@ -2616,6 +2619,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
     def package_and_export_mod(self):
         """
         Export current active character's morphed mesh as a MOD folder.
+        Always prompts user for folder name first, then exports.
         Uses ExportProgressDialog with a background ModExportWorker thread.
         """
         char_id = self.active_char_id
@@ -2639,49 +2643,95 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             )
             return
 
-        # Determine mod directory
-        mod_dir = os.path.join(self.root_dir, "exported_mod", f"Body_Slider_Mod_{char_id}")
-        mod_folder_name = f"Body_Slider_Mod_{char_id}"
+        char_name = char.get("name", char_id)
 
-        # Check if mod_dir exists (synchronous dialog before loading)
-        if os.path.exists(mod_dir):
-            reply = show_choice(
-                self,
-                self.T.get("mod_folder_exists_title", "Folder Already Exists"),
-                self.T.get(
-                    "mod_folder_exists",
-                    "The folder '{folder}' already exists in exported_mod.\n"
-                    "Do you want to:\n"
-                    "- Delete: remove the existing folder and export again\n"
-                    "- Rename: create a new folder with a custom name\n"
-                    "- Cancel",
-                ).format(folder=mod_folder_name),
-                [
-                    self.T.get("mod_action_delete", "Delete"),
-                    self.T.get("mod_action_rename", "Rename"),
-                    self.T.get("btn_cancel", "Cancel"),
-                ],
+        # Always prompt user for MOD folder name
+        from core.ui_components import ModRenameDialog
+
+        exported_mod_dir = os.path.join(self.root_dir, "exported_mod")
+        os.makedirs(exported_mod_dir, exist_ok=True)
+
+        default_name = f"Body_Slider_Mod_{char_id}"
+        mod_folder_name = None
+        while mod_folder_name is None:
+            rename_dlg = ModRenameDialog(
+                T=self.T,
+                parent=self,
+                title=self.T.get("mod_rename_title", "Rename MOD Folder"),
+                prompt=self.T.get(
+                    "mod_rename_prompt",
+                    "Enter a new folder name (max 64 characters, must follow Windows naming rules):",
+                ),
+                text=default_name,
             )
-
-            if reply is None or reply == self.T.get("btn_cancel", "Cancel"):
+            if rename_dlg.exec() != QDialog.DialogCode.Accepted:
                 return
 
-            if reply == self.T.get("mod_action_rename", "Rename"):
-                mod_folder_name = self._prompt_mod_folder_name(mod_dir)
-                if not mod_folder_name:
-                    return
-                mod_dir = os.path.join(self.root_dir, "exported_mod", mod_folder_name)
-            else:
-                # Delete existing
+            candidate = rename_dlg.text()
+            if not candidate:
+                show_warning(
+                    self,
+                    self.T.get("msg_error", "Error"),
+                    self.T.get("mod_rename_required", "Folder name is required. Please enter a name."),
+                )
+                continue
+            if len(candidate) > 64:
+                show_warning(
+                    self,
+                    self.T.get("msg_error", "Error"),
+                    self.T.get("mod_rename_too_long", "Folder name is too long. Maximum 64 characters allowed."),
+                )
+                continue
+            invalid_chars = r'<>:"/\|?*'
+            if any(c in invalid_chars for c in candidate):
+                show_warning(
+                    self,
+                    self.T.get("msg_error", "Error"),
+                    self.T.get("mod_rename_invalid_chars", "Invalid characters in folder name.\nDo not use: < > : \" / \\ | ? *"),
+                )
+                continue
+            reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
+            if candidate.upper().rstrip() in reserved:
+                show_warning(
+                    self,
+                    self.T.get("msg_error", "Error"),
+                    self.T.get("mod_rename_reserved", "This name is reserved by Windows and cannot be used."),
+                )
+                continue
+            if candidate.strip().isspace():
+                show_warning(
+                    self,
+                    self.T.get("msg_error", "Error"),
+                    self.T.get("mod_rename_blank", "Folder name cannot be only spaces."),
+                )
+                continue
+            candidate_subdir = os.path.join(exported_mod_dir, candidate)
+            if os.path.exists(candidate_subdir):
+                reply = show_choice(
+                    self,
+                    self.T.get("mod_folder_exists_title", "Folder Already Exists"),
+                    self.T.get(
+                        "mod_folder_exists_choice",
+                        "A folder '{folder}' already exists in exported_mod.\nChoose:\n- Overwrite: delete the existing folder and export\n- Rename: enter a different folder name",
+                    ).format(folder=candidate),
+                    [
+                        self.T.get("mod_action_overwrite", "Overwrite"),
+                        self.T.get("mod_action_rename", "Rename"),
+                    ],
+                )
+                if reply is None or reply == self.T.get("mod_action_rename", "Rename"):
+                    continue
+                # Overwrite chosen - delete existing folder
                 try:
-                    shutil.rmtree(mod_dir)
+                    import shutil as _shutil
+                    _shutil.rmtree(candidate_subdir)
                 except Exception:
                     pass
+                mod_folder_name = candidate
 
+        mod_dir = os.path.join(exported_mod_dir, mod_folder_name)
         os.makedirs(mod_dir, exist_ok=True)
         files_dir = os.path.join(mod_dir, "files")
-
-        char_name = char.get("name", char_id)
 
         # Show progress dialog (not loading overlay)
         from core.ui_components import ExportProgressDialog
@@ -2713,6 +2763,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             sliders_info=self.sliders_info,
             root_dir=self.root_dir,
             outfit_config_all=outfit_config_all,
+            mod_folder_name=mod_folder_name,
         )
 
         worker_thread = QThread()
@@ -2789,46 +2840,6 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         worker_thread.start()
 
     # ----------
-
-    def _prompt_mod_folder_name(self, mod_dir: str) -> Optional[str]:
-        """Prompt user for a custom MOD folder name."""
-        from core.ui_components import ModRenameDialog
-        mod_folder_name = None
-        while mod_folder_name is None:
-            rename_dlg = ModRenameDialog(
-                T=self.T,
-                parent=self,
-                title=self.T.get("mod_rename_title", "Rename MOD Folder"),
-                prompt=self.T.get(
-                    "mod_rename_prompt",
-                    "Enter a new folder name (max 64 characters, must follow Windows naming rules):",
-                ),
-                text="Body_Slider_Mod_Custom",
-            )
-            if rename_dlg.exec() != QDialog.DialogCode.Accepted:
-                return ""
-
-            candidate = rename_dlg.text()
-            if not candidate:
-                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("mod_rename_required", "Folder name is required."))
-                continue
-            if len(candidate) > 64:
-                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("mod_rename_too_long", "Folder name too long."))
-                continue
-            invalid_chars = r'<>:"/\|?*'
-            if any(c in invalid_chars for c in candidate):
-                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("mod_rename_invalid_chars", "Invalid characters."))
-                continue
-            reserved = {"CON", "PRN", "AUX", "NUL", *(f"COM{i}" for i in range(1, 10)), *(f"LPT{i}" for i in range(1, 10))}
-            if candidate.upper().rstrip() in reserved:
-                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("mod_rename_reserved", "Reserved name."))
-                continue
-            candidate_subdir = os.path.join(os.path.dirname(mod_dir), candidate)
-            if os.path.exists(candidate_subdir):
-                show_warning(self, self.T.get("msg_error", "Error"), self.T.get("mod_rename_exists", "Folder exists."))
-                continue
-            mod_folder_name = candidate
-        return mod_folder_name
 
     def _export_character_pac(self, char_id: str, original_pac: str, mod_path: str, files_dir: str):
         """

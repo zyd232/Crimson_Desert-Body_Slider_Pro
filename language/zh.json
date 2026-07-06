@@ -205,10 +205,13 @@
  
   "mod_folder_exists_title": "同名文件夹已存在",
   "mod_folder_exists": "exported_mod 中的文件夹 '{folder}' 已存在。\n请选择：\n- 删除：删除现有文件夹并重新导出\n- 重命名：使用自定义名称创建新文件夹",
+  "mod_folder_exists_choice": "exported_mod 中的文件夹 '{folder}' 已存在。\n请选择：\n- 覆盖：删除现有文件夹并重新导出\n- 重命名：输入不同的文件夹名称",
   "mod_action_delete": "删除",
+  "mod_action_overwrite": "覆盖",
   "mod_action_rename": "重命名",
   "mod_rename_title": "重命名 MOD 文件夹",
   "mod_rename_prompt": "输入新的文件夹名称（最多 64 个字符，需符合 Windows 命名规则）：",
+  "mod_rename_required": "文件夹名称不能为空，请输入名称。",
   "mod_rename_too_long": "文件夹名称过长，最多 64 个字符。",
   "mod_rename_invalid_chars": "文件夹名称包含无效字符。\n请勿使用： < > : \" / \\ | ? *",
   "mod_rename_reserved": "该名称是 Windows 保留名称，无法使用。",
