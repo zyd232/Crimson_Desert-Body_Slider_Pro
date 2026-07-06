@@ -1167,6 +1167,15 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                 # Delete outfit config file
                 self.outfit_config_mgr.delete_config(char_id_for_delete)
 
+                # Remove outfit directories for this character
+                for outfit_dir_name in ("original_outfit", "exported_outfit"):
+                    outfit_dir = os.path.join(self.root_dir, outfit_dir_name, char_id_for_delete)
+                    if os.path.isdir(outfit_dir):
+                        try:
+                            shutil.rmtree(outfit_dir)
+                        except OSError:
+                            pass
+
                 del self.characters[char_id_for_delete]
                 self.character_sliders.pop(char_id_for_delete, None)
                 
