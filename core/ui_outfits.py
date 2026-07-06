@@ -267,6 +267,7 @@ class OutfitSlidersPanel(QWidget):
         self,
         body_slider,
         char_id: str,
+        is_default_char: bool = True,
         parent: Optional[QWidget] = None,
     ):
         super().__init__(parent)
@@ -275,6 +276,7 @@ class OutfitSlidersPanel(QWidget):
         self.root_dir = body_slider.root_dir
         self.char_id = char_id
         self.T = body_slider.T
+        self._is_default_char = is_default_char
 
         # Store slider widget references for synchronization
         # key -> {"slider": QSlider, "spin": NoWheelSpinBox, "info": dict}
@@ -284,9 +286,11 @@ class OutfitSlidersPanel(QWidget):
         self._outfit_mod_path: str = ""
 
         # Create the two independent panels (not added to self layout)
-        self.default_panel = _OutfitSingleSlidersPanel(
-            self._tr("group_outfit_default"), self
-        )
+        # Custom characters do not have default outfit sliders
+        if is_default_char:
+            self.default_panel = _OutfitSingleSlidersPanel(
+                self._tr("group_outfit_default"), self
+            )
         self.custom_panel = _OutfitSingleSlidersPanel(
             self._tr("group_outfit_custom"), self
         )
@@ -340,19 +344,20 @@ class OutfitSlidersPanel(QWidget):
                 do not disappear. If False (default), only clears the widgets
                 without adding placeholders. Used internally by load_sliders().
         """
-        self._clear_layout(self.default_scroll_layout, self.default_scroll_content)
+        if self._is_default_char:
+            self._clear_layout(self.default_scroll_layout, self.default_scroll_content)
         self._clear_layout(self.custom_scroll_layout, self.custom_scroll_content)
         self._slider_widgets.clear()
         if show_empty:
             # Show "no sliders" placeholder labels
-            self.default_scroll_layout.addWidget(
-                QLabel(self._tr("no_outfit_sliders"))
-            )
+            if self._is_default_char:
+                self.default_scroll_layout.addWidget(
+                    QLabel(self._tr("no_outfit_sliders"))
+                )
+                self.default_panel.show()
             self.custom_scroll_layout.addWidget(
                 QLabel(self._tr("no_outfit_sliders"))
             )
-            # Keep both panels visible even when no outfit is activated
-            self.default_panel.show()
             self.custom_panel.show()
 
     def load_sliders(
@@ -426,14 +431,15 @@ class OutfitSlidersPanel(QWidget):
                 default_sliders.append((key, info))
 
         # Build UI rows
-        for key, info in default_sliders:
-            self._add_slider_row(key, info, self.default_scroll_layout)
+        if self._is_default_char:
+            for key, info in default_sliders:
+                self._add_slider_row(key, info, self.default_scroll_layout)
 
         for key, info in custom_sliders:
             self._add_slider_row(key, info, self.custom_scroll_layout)
 
         # Show "no sliders" labels if empty
-        if not default_sliders:
+        if self._is_default_char and not default_sliders:
             self.default_scroll_layout.addWidget(
                 QLabel(self._tr("no_outfit_sliders"))
             )
@@ -442,8 +448,9 @@ class OutfitSlidersPanel(QWidget):
                 QLabel(self._tr("no_outfit_sliders"))
             )
 
-        # Show both panels
-        self.default_panel.show()
+        # Show panels
+        if self._is_default_char:
+            self.default_panel.show()
         self.custom_panel.show()
 
     def _add_slider_row(

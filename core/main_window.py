@@ -414,7 +414,8 @@ class MainWindowUIMixin:
             if outfits_panel is None:
                 return
             will_show = not outfits_panel.isVisible()
-            self.outfit_mgr.adjust_window_width(will_show)
+            is_default_char = self.characters.get(char_id, {}).get("is_default", False)
+            self.outfit_mgr.adjust_window_width(will_show, is_default_char)
             if will_show:
                 outfits_panel.show()
                 if outfit_default_panel is not None:
@@ -574,7 +575,7 @@ class MainWindowUIMixin:
 
             # Outfit Sliders panels (added as independent children for six-panel layout)
             from core.ui_outfits import OutfitSlidersPanel
-            outfit_sliders_panel = OutfitSlidersPanel(self, char_id)
+            outfit_sliders_panel = OutfitSlidersPanel(self, char_id, is_default_char)
             outfit_sliders_panel.outfitSliderValueChanged.connect(
                 self._on_outfit_slider_value_changed
             )
@@ -597,14 +598,27 @@ class MainWindowUIMixin:
             outfit_sliders_container_layout.setContentsMargins(0, 0, 0, 0)
             outfit_sliders_container_layout.setSpacing(4)
 
-            # Horizontal splitter for the two outfit slider panels
-            outfit_h_splitter = QSplitter(Qt.Orientation.Horizontal)
-            outfit_h_splitter.setChildrenCollapsible(False)
-            outfit_h_splitter.addWidget(outfit_sliders_panel.default_panel)
-            outfit_h_splitter.addWidget(outfit_sliders_panel.custom_panel)
-            outfit_h_splitter.setStretchFactor(0, 1)
-            outfit_h_splitter.setStretchFactor(1, 1)
-            outfit_sliders_container_layout.addWidget(outfit_h_splitter, stretch=1)
+            # Outfit slider panels layout
+            # Custom characters do not have default outfit sliders - use direct
+            # widget (no splitter) so the single panel expands to fill the container.
+            if is_default_char:
+                outfit_h_splitter = QSplitter(Qt.Orientation.Horizontal)
+                outfit_h_splitter.setChildrenCollapsible(False)
+                outfit_h_splitter.addWidget(outfit_sliders_panel.default_panel)
+                outfit_h_splitter.addWidget(outfit_sliders_panel.custom_panel)
+                outfit_h_splitter.setStretchFactor(0, 1)
+                outfit_h_splitter.setStretchFactor(1, 1)
+                outfit_sliders_container_layout.addWidget(outfit_h_splitter, stretch=1)
+            else:
+                # Single panel needs expanding policy to fill the container
+                outfit_sliders_panel.custom_panel.setMaximumWidth(16777215)
+                outfit_sliders_panel.custom_panel.setSizePolicy(
+                    QSizePolicy.Policy.Expanding,
+                    QSizePolicy.Policy.Expanding,
+                )
+                outfit_sliders_container_layout.addWidget(
+                    outfit_sliders_panel.custom_panel, stretch=1
+                )
 
             # Button row: Export Outfit Model (.obj) | + Add Outfit Custom Slider
             outfit_btns_row = QHBoxLayout()
@@ -632,7 +646,8 @@ class MainWindowUIMixin:
             outer_splitter.addWidget(outfit_sliders_container)
 
             page.outfit_sliders_panel = outfit_sliders_panel
-            page.outfit_default_sliders_panel = outfit_sliders_panel.default_panel
+            if is_default_char:
+                page.outfit_default_sliders_panel = outfit_sliders_panel.default_panel
             page.outfit_custom_sliders_panel = outfit_sliders_panel.custom_panel
             page.outfit_sliders_container = outfit_sliders_container
             page.outfit_btn_add = outfit_btn_add
@@ -976,19 +991,22 @@ class MainWindowUIMixin:
 
             # Outer splitter layout:
             #   has_outfits=True: [Sliders Container] [Outfits] [Outfit Sliders Container] = 3 children
-            #     Sliders Container contains 2 panels (Default+Custom) via inner splitter
-            #     Outfit Sliders Container contains 2 panels (Outfit Default+Custom) via inner splitter
-            #     So 3 children represent 5 equal panels
+            #     Default char: Sliders=2 panels, Outfits=1, Outfit Sliders=2 → 5 equal panels
+            #     Custom char: Sliders=1 panel, Outfits=1, Outfit Sliders=1 → 3 equal panels
             #   has_outfits=False: [Sliders Container] = 1 child
             if has_outfits and outer_splitter.count() >= 3:
-                # Five equal panels within outer_splitter (each = total/5)
-                # Sliders container = 2 panels = 2/5 of outer_splitter width
-                # Outfits panel = 1 panel = 1/5
-                # Outfit Sliders container = 2 panels = 2/5
-                panel_w = total // 5
-                sliders_w = panel_w * 2
-                outfits_w = panel_w
-                outfit_sliders_w = panel_w * 2
+                if is_default_char:
+                    # Five equal panels (each = total/5)
+                    panel_w = total // 5
+                    sliders_w = panel_w * 2
+                    outfits_w = panel_w
+                    outfit_sliders_w = panel_w * 2
+                else:
+                    # Three equal panels (each = total/3)
+                    panel_w = total // 3
+                    sliders_w = panel_w
+                    outfits_w = panel_w
+                    outfit_sliders_w = panel_w
                 sizes = [sliders_w, outfits_w, outfit_sliders_w]
                 # Adjust last element to account for rounding
                 sizes[-1] = total - sum(sizes[:-1])

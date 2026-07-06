@@ -834,17 +834,20 @@ class OutfitManager:
 
     # ---------- window width for outfits panel ----------
 
-    def adjust_window_width(self, show_panel: bool):
+    def adjust_window_width(self, show_panel: bool, is_default_char: bool = True):
         """
         Adjust main window width based on whether OutfitsPanel is shown.
-        Now controls 3 panels: Outfits, Outfit Default Sliders, Outfit Custom Sliders.
+        Controls 3 panels for default chars (Outfits, Outfit Default Sliders,
+        Outfit Custom Sliders) or 2 panels for custom chars (Outfits,
+        Outfit Custom Sliders).
         """
         h = self.host
         if h.is_maximized():
             return
 
-        # Each panel ~200px, 3 panels total
-        outfit_w = 200 * 3
+        # Each panel ~200px; default chars have 3 panels, custom chars have 2
+        panel_count = 3 if is_default_char else 2
+        outfit_w = 200 * panel_count
         w = h.window_width()
 
         if show_panel:
