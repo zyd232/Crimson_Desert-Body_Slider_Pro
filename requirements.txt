@@ -1,5 +1,5 @@
-trimesh
-numpy
-PyQt6
-PyOpenGL
-zstandard
+trimesh==4.12.2
+numpy==2.4.4
+PyQt6==6.11.0
+PyOpenGL==3.1.10
+zstandard==0.25.0
