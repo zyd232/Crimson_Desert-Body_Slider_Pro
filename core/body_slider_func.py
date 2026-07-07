@@ -2546,7 +2546,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                         "name": mod_folder_name,
                         "author": "Body Slider Pro - by zyd232",
                         "version": "1.0.0",
-                        "description": f"Model modifications for {mod_folder_name}",
+                        "description": f"Model modifications for {self.char_id}",
                         "generator": "Body Slider Pro",
                         "nexus_url": "https://www.nexusmods.com/crimsondesert/mods/2727",
                     },
@@ -2736,7 +2736,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                     _shutil.rmtree(candidate_subdir)
                 except Exception:
                     pass
-                mod_folder_name = candidate
+            mod_folder_name = candidate
 
         mod_dir = os.path.join(exported_mod_dir, mod_folder_name)
         os.makedirs(mod_dir, exist_ok=True)

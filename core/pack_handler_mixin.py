@@ -924,26 +924,25 @@ class PackHandlerMixin:
                                     except Exception:
                                         pass
 
-                    # If outfitter pack, extract outfit data for overwrite characters
-                    if pack_type == "outfitter":
-                        effective_ids = set(get_effective_cid(cid) for cid in outfit_overwrite_ids)
-                        for src_folder in ("exported_outfit", "original_outfit"):
-                            src_base = os.path.join(temp_dir, src_folder)
-                            if not os.path.isdir(src_base):
+                    # Extract outfit data for overwrite characters (both outfitter and app packs)
+                    effective_ids = set(get_effective_cid(cid) for cid in outfit_overwrite_ids)
+                    for src_folder in ("exported_outfit", "original_outfit"):
+                        src_base = os.path.join(temp_dir, src_folder)
+                        if not os.path.isdir(src_base):
+                            continue
+                        dst_base = os.path.join(root_dir, src_folder)
+                        os.makedirs(dst_base, exist_ok=True)
+                        for item in os.listdir(src_base):
+                            if item not in effective_ids:
                                 continue
-                            dst_base = os.path.join(root_dir, src_folder)
-                            os.makedirs(dst_base, exist_ok=True)
-                            for item in os.listdir(src_base):
-                                if item not in effective_ids:
-                                    continue
-                                sp = os.path.join(src_base, item)
-                                dp = os.path.join(dst_base, item)
-                                if os.path.isdir(sp):
-                                    if os.path.exists(dp):
-                                        shutil.rmtree(dp)
-                                    shutil.copytree(sp, dp)
-                                else:
-                                    shutil.copy2(sp, dp)
+                            sp = os.path.join(src_base, item)
+                            dp = os.path.join(dst_base, item)
+                            if os.path.isdir(sp):
+                                if os.path.exists(dp):
+                                    shutil.rmtree(dp)
+                                shutil.copytree(sp, dp)
+                            else:
+                                shutil.copy2(sp, dp)
 
                     # Handle outfit_config for imported characters
                     self._handle_outfit_config_import(
@@ -954,7 +953,7 @@ class PackHandlerMixin:
 
                     # Collect character IDs that have outfit changes (for index rebuild later)
                     outfit_changed_ids: Set[str] = set()
-                    
+            
                     # Handle outfit merge characters
                     for cid in outfit_merge_ids:
                         if cid in outfit_overwrite_ids:
@@ -964,35 +963,35 @@ class PackHandlerMixin:
                         unique_files = merge_result.get("unique_files", [])
                         dup_groups = merge_result.get("dup_groups", [])
                         effective_cid = get_effective_cid(cid)
-
+            
                         # Apply merge choices for duplicates
                         if dup_groups and choices:
                             apply_outfit_merge_choices(
                                 dup_groups, choices, root_dir, effective_cid
                             )
-
+            
                         # Copy unique files
                         if unique_files:
                             copy_outfit_files(unique_files, root_dir, effective_cid)
-
+            
                         # Track for index rebuild
                         outfit_changed_ids.add(effective_cid)
-                    
+            
                     # Also track overwrite characters that had outfit data
                     for cid in outfit_overwrite_ids:
                         effective_cid = get_effective_cid(cid)
                         outfit_changed_ids.add(effective_cid)
-
+            
                     imported_ids: List[str] = []
-
+            
                     for cid in selected_ids:
                         effective_cid = get_effective_cid(cid)
                         is_merge = cid in merge_ids
-
+            
                         src_cfg = os.path.join(temp_dir, "char_config", f"{cid}.json")
                         src_orig = os.path.join(temp_dir, "original_mesh", cid)
                         src_tgt = os.path.join(temp_dir, "target_mesh", cid)
-
+            
                         # original_mesh
                         dst_orig_base = self.cm.char_original_mesh_dir(effective_cid)
                         if os.path.exists(src_orig):
@@ -1000,7 +999,7 @@ class PackHandlerMixin:
                                 shutil.rmtree(dst_orig_base)
                             os.makedirs(os.path.dirname(dst_orig_base), exist_ok=True)
                             shutil.move(src_orig, dst_orig_base)
-
+            
                         # target_mesh handling depends on mode
                         if is_merge:
                             # Don't fully overwrite target_mesh; we will merge sliders later
@@ -1026,14 +1025,30 @@ class PackHandlerMixin:
                                     shutil.rmtree(dst_tgt_base)
                                 os.makedirs(os.path.dirname(dst_tgt_base), exist_ok=True)
                                 shutil.move(src_tgt, dst_tgt_base)
-
+            
                         # char_config: for merge, we will rewrite it after merging sliders
                         if not is_merge:
                             if os.path.exists(src_cfg):
                                 dst_cfg = os.path.join(char_config_dir, f"{effective_cid}.json")
                                 os.makedirs(os.path.dirname(dst_cfg), exist_ok=True)
                                 shutil.move(src_cfg, dst_cfg)
-
+            
+                        # outfit directories: copy original_outfit and exported_outfit for
+                        # non-merge characters (new characters and overwrite characters).
+                        # Overwrite characters were already handled above (lines 927-945),
+                        # but this is idempotent. Critical for new characters which are NOT
+                        # in outfit_overwrite_ids and would otherwise miss their outfit data.
+                        if not is_merge:
+                            for outfit_dir_name in ("original_outfit", "exported_outfit"):
+                                src_outfit = os.path.join(temp_dir, outfit_dir_name, cid)
+                                if not os.path.isdir(src_outfit):
+                                    continue
+                                dst_outfit = os.path.join(root_dir, outfit_dir_name, effective_cid)
+                                if os.path.exists(dst_outfit):
+                                    shutil.rmtree(dst_outfit)
+                                shutil.copytree(src_outfit, dst_outfit)
+                                outfit_changed_ids.add(effective_cid)
+            
                         imported_ids.append(effective_cid)
 
                     # Now handle merge characters: merge sliders and write configs
