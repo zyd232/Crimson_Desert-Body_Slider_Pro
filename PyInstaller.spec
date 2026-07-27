@@ -47,7 +47,8 @@ exclude_root_files = [
     "convert_icon.py", 
     "PyInstaller.spec",   
     "requirements.txt",
-    "run_graphify.bat"
+    "run_graphify.bat",
+    "LICENSE"
 ]
 
 # Collect core resources (data files in core/)
