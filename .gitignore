@@ -9,12 +9,10 @@ __pycache__/
 /exported_mod/
 /exported_outfit/
 graphify-out/
-/original_mesh/
 /original_outfit/
 /outfit_config/
 /plans/
 run_graphify.bat
-/target_mesh/
 /test/
 /tests/
 /venv/
