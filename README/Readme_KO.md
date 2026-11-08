@@ -90,7 +90,7 @@ Body Slider Pro를 실행하면:
 
 다른 모더의 체형을 슬라이더로 조정하고 싶다면:
 
-1. 해당 MOD에서 캐릭터의 `.pac` 파일을 찾습니다. (예: Damiane의 경우 보통 `cd_phw_00_nude_00_0001_damian.pac`)
+1. 해당 MOD에서 캐릭터의 `.pac` 파일을 찾습니다. (예: Damiane의 경우 보통 `phw_00_nude_00_0001_damian.pac`, 구버전 게임은 `cd_phw_00_nude_00_0001_damian.pac`)
    - 중요: 이 `.pac`는 현재 캐릭터의 원본 PAC과 **동일한 캐릭터/아이템**이어야 합니다.
 2. Body Slider Pro에서:
     - **+ 커스텀 슬라이더 추가** 클릭.

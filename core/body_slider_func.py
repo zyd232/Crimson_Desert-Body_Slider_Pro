@@ -51,6 +51,7 @@ from core.mesh_processor import (
 from core.ui_components import (
     DEFAULT_MOD_PATH,
     DEFAULT_PAC_NAME,
+    LEGACY_DEFAULT_PAC_NAMES,
     DEFAULT_CHAR_ID,
     DEFAULT_CHAR_NAME,
     SLIDER_NAME_MAX_LEN,
@@ -194,6 +195,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             default_character_order=self.DEFAULT_CHARACTER_ORDER,
             default_sliders=DEFAULT_SLIDERS,
             default_pac_name=DEFAULT_PAC_NAME,
+            legacy_default_pac_names=LEGACY_DEFAULT_PAC_NAMES,
             default_char_id=DEFAULT_CHAR_ID,
             default_char_name=DEFAULT_CHAR_NAME,
             default_mod_path=DEFAULT_MOD_PATH,
@@ -1261,7 +1263,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         if not reply:
             return
 
-        new_pac = os.path.join(self.root_dir, "original_mesh", DEFAULT_CHAR_ID, DEFAULT_PAC_NAME)
+        new_pac = self.cm.resolve_default_pac_path(char_id) or os.path.join(
+            self.root_dir, "original_mesh", DEFAULT_CHAR_ID, DEFAULT_PAC_NAME
+        )
 
         self.characters[char_id] = {
             "name": DEFAULT_CHAR_NAME,
@@ -1312,7 +1316,9 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
         # Delete outfit config file
         self.outfit_config_mgr.delete_config(char_id)
 
-        new_pac = os.path.join(self.root_dir, "original_mesh", DEFAULT_CHAR_ID, DEFAULT_PAC_NAME)
+        new_pac = self.cm.resolve_default_pac_path(char_id) or os.path.join(
+            self.root_dir, "original_mesh", DEFAULT_CHAR_ID, DEFAULT_PAC_NAME
+        )
 
         self.characters[char_id] = {
             "name": DEFAULT_CHAR_NAME,
@@ -2417,7 +2423,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                                 # Build short_id -> char_slider_id mapping
                                 # slider_segment matches JSON short_id format:
                                 #   Default: "breast_size_type_01"
-                                #   Custom:  "custom/cd_phw_00_nude_00_0001_damian"
+                                #   Custom:  "custom/phw_00_nude_00_0001_damian"
                                 short_id_to_char_sid: Dict[str, str] = {}
                                 for sid, info in self.sliders_info.items():
                                     path = info.get("path", "")
@@ -2988,7 +2994,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
             for sid, info in self.sliders_info.items():
                 # Extract slider_ref_path from the slider's target path
                 # e.g., target_mesh/damiane/areola_puffy.obj -> areola_puffy/
-                # e.g., target_mesh/damiane/custom/cd_phw_00_nude_00_0001_damian.pac -> custom/cd_phw_00_nude_00_0001_damian/
+                # e.g., target_mesh/damiane/custom/phw_00_nude_00_0001_damian.pac -> custom/phw_00_nude_00_0001_damian/
                 slider_path = info.get("path", "")
                 normalized = slider_path.replace("\\", "/")
                 tm_idx = normalized.find("target_mesh/")
@@ -3092,7 +3098,7 @@ class BodySlider(QMainWindow, MainWindowUIMixin, PackHandlerMixin, FramelessWind
                 # Build short_id -> char_slider_id mapping
                 # slider_segment matches JSON short_id format:
                 #   Default: "breast_size_type_01"
-                #   Custom:  "custom/cd_phw_00_nude_00_0001_damian"
+                #   Custom:  "custom/phw_00_nude_00_0001_damian"
                 short_id_to_char_sid: Dict[str, str] = {}
                 for sid, info in self.sliders_info.items():
                     path = info.get("path", "")

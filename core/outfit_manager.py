@@ -351,10 +351,10 @@ class OutfitManager:
 
         for sid, info in h.sliders_info.items():
             # Extract the slider segment from the target mesh path.
-            # Example: "target_mesh/damiane/custom/cd_phw_00_nude_00_0001_damian.pac"
-            #   -> after removing "target_mesh/" prefix: "damiane/custom/cd_phw_00_nude_00_0001_damian.pac"
-            #   -> after removing char_id segment: "custom/cd_phw_00_nude_00_0001_damian.pac"
-            #   -> after removing extension: "custom/cd_phw_00_nude_00_0001_damian"
+            # Example: "target_mesh/damiane/custom/phw_00_nude_00_0001_damian.pac"
+            #   -> after removing "target_mesh/" prefix: "damiane/custom/phw_00_nude_00_0001_damian.pac"
+            #   -> after removing char_id segment: "custom/phw_00_nude_00_0001_damian.pac"
+            #   -> after removing extension: "custom/phw_00_nude_00_0001_damian"
             # Example: "target_mesh/damiane/breast_size_type_01.obj"
             #   -> "breast_size_type_01"
             # 从滑块的 path 中提取 slider_segment（即 target_mesh/{char_id}/之后的部分去掉扩展名）
@@ -655,7 +655,7 @@ class OutfitManager:
                     if not os.path.isdir(sub_path):
                         continue
                     # Include "custom/" prefix so the short_id matches the slider_segment
-                    # format used in MOD export (e.g. "custom/cd_phw_00_nude_00_0001_damian")
+                    # format used in MOD export (e.g. "custom/phw_00_nude_00_0001_damian")
                     short_id = f"custom/{sub_entry}"
                     slider_dir = sub_path
                     candidates = [
@@ -811,7 +811,7 @@ class OutfitManager:
         For default sliders: match by short_id part of full_id (e.g. "breast_size_type_01")
         For custom sliders: match by path containing "custom/{base_name}"
             (e.g. target_mesh/{char_id}/custom/{base_name}.obj)
-            short_id for custom now includes "custom/" prefix (e.g. "custom/cd_phw_00_nude_00_0001_damian")
+            short_id for custom now includes "custom/" prefix (e.g. "custom/phw_00_nude_00_0001_damian")
 
         Returns the full_id if found, None otherwise.
         """

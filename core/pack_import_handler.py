@@ -255,7 +255,7 @@ def find_outfit_duplicates(
     # original_outfit/{char_id}/{mod_dir}/{file}
     #
     # The {slider_segment} can be multi-level for custom sliders, e.g.
-    #   "custom/cd_phw_00_nude_00_0001_damian"
+    #   "custom/phw_00_nude_00_0001_damian"
     # So we need to find which prefix (slider_segment) to strip.
     # Strategy: for each exported rel_path, try to match the suffix against
     # known original_outfit duplicate rel_paths.
@@ -269,9 +269,9 @@ def find_outfit_duplicates(
         # matches an original duplicate.
         # 
         # Split by "/" and try progressively longer suffixes:
-        # e.g. "custom/cd_phw_00_nude_00_0001_damian/character/model/.../file.pac"
+        # e.g. "custom/phw_00_nude_00_0001_damian/character/model/.../file.pac"
         #   try "character/model/.../file.pac" (strip 2 segments)
-        #   try "cd_phw_00_nude_00_0001_damian/character/model/.../file.pac" (strip 1 segment)
+        #   try "phw_00_nude_00_0001_damian/character/model/.../file.pac" (strip 1 segment)
         #   etc.
         # 
         # Also try: "breast_size_type_01/character/model/.../file.pac"

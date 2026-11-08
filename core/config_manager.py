@@ -40,6 +40,7 @@ class ConfigManager:
         default_char_id: str,
         default_char_name: str,
         default_mod_path: str,
+        legacy_default_pac_names: Optional[List[str]] = None,
     ):
         self.root_dir = root_dir
         self.config_path = config_path
@@ -61,6 +62,7 @@ class ConfigManager:
 
         # Defaults
         self.default_pac_name = default_pac_name
+        self.legacy_default_pac_names = list(legacy_default_pac_names or [])
         self.default_char_id = default_char_id
         self.default_char_name = default_char_name
         self.default_mod_path = default_mod_path
@@ -166,6 +168,80 @@ class ConfigManager:
             shutil.move(legacy_pac, new_pac)
             return new_pac
         return None
+
+    def resolve_default_pac_path(self, char_id: Optional[str] = None) -> Optional[str]:
+        """
+        Resolve the default body PAC for a character, migrating any legacy
+        file name (e.g. pre-game-update "cd_..." name) to the current name.
+
+        Checks, in order:
+          1. original_mesh/<char_id>/<default_pac_name>
+          2. original_mesh/<char_id>/<each legacy name>  -> renamed to current name
+          3. original_mesh/<default_pac_name> (legacy flat layout) -> moved into char dir
+          4. original_mesh/<each legacy name> (legacy flat layout) -> moved into char dir
+
+        Returns the resolved absolute path, or None if no PAC is found.
+        """
+        cid = char_id or self.default_char_id
+        char_dir = os.path.join(self.root_dir, "original_mesh", cid)
+        current = os.path.join(char_dir, self.default_pac_name)
+
+        candidates = [current]
+        candidates += [os.path.join(char_dir, n) for n in self.legacy_default_pac_names]
+        candidates.append(os.path.join(self.root_dir, "original_mesh", self.default_pac_name))
+        candidates += [
+            os.path.join(self.root_dir, "original_mesh", n)
+            for n in self.legacy_default_pac_names
+        ]
+
+        for candidate in candidates:
+            if candidate and os.path.exists(candidate):
+                if candidate == current:
+                    return candidate
+                os.makedirs(os.path.dirname(current), exist_ok=True)
+                if os.path.abspath(candidate) != os.path.abspath(current):
+                    shutil.move(candidate, current)
+                return current
+        return None
+
+    def migrate_pac_path_in_config(self, cid: str, pac: str) -> str:
+        """
+        If a stored original_pac_path points to a legacy file name that no
+        longer exists on disk but a same-named current file does, fix the
+        reference (and rename the legacy file on disk if it still exists).
+        """
+        if not pac:
+            return pac
+        if os.path.isabs(pac):
+            full = pac
+        else:
+            full = os.path.abspath(os.path.join(self.root_dir, pac))
+
+        if os.path.exists(full):
+            # File exists; if it still uses a legacy name, rename it to the
+            # current name so future lookups stay consistent.
+            base = os.path.basename(full)
+            if base in self.legacy_default_pac_names:
+                new_full = os.path.join(os.path.dirname(full), self.default_pac_name)
+                if not os.path.exists(new_full):
+                    try:
+                        shutil.move(full, new_full)
+                    except (OSError, shutil.Error):
+                        return self.norm_path(full)
+                return self.norm_path(new_full)
+            return self.norm_path(full)
+
+        # File missing: try the legacy names in the same directory.
+        d = os.path.dirname(full)
+        if d and os.path.isdir(d):
+            for name in self.legacy_default_pac_names:
+                legacy = os.path.join(d, name)
+                if os.path.exists(legacy):
+                    new_full = os.path.join(d, self.default_pac_name)
+                    if os.path.abspath(legacy) != os.path.abspath(new_full):
+                        shutil.move(legacy, new_full)
+                    return self.norm_path(new_full)
+        return self.norm_path(full)
 
     # ---------- slider id helpers ----------
 
@@ -327,6 +403,8 @@ class ConfigManager:
             pac = char_info.get("original_pac_path", "")
             if pac and not os.path.isabs(pac):
                 pac = os.path.abspath(os.path.join(self.root_dir, pac))
+            # Migrate references to legacy file names (e.g. pre-update "cd_..." name)
+            pac = self.migrate_pac_path_in_config(char_id, pac)
             char_info["original_pac_path"] = pac
 
             self.characters[char_id] = char_info
@@ -521,11 +599,7 @@ class ConfigManager:
     # ---------- migration / defaults ----------
 
     def _migrate_or_init_default(self, active_id: Optional[str]) -> None:
-        default_pac_name = self.default_pac_name
-        legacy_pac = os.path.join(self.root_dir, "original_mesh", default_pac_name)
-        new_pac = os.path.join(self.root_dir, "original_mesh", self.default_char_id, default_pac_name)
-
-        pac_path = self.resolve_default_pac(legacy_pac, new_pac)
+        pac_path = self.resolve_default_pac_path(self.default_char_id)
 
         char_info = {
             "name": self.default_char_name,

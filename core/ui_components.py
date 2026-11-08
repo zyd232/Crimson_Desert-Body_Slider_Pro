@@ -151,7 +151,12 @@ CLICK_DRAG_THRESHOLD = 9
 SINGLE_SLIDER_ROW_HEIGHT = 90
 
 DEFAULT_MOD_PATH = "character\\model\\1_pc\\2_phw\\nude"
-DEFAULT_PAC_NAME = "cd_phw_00_nude_00_0001_damian.pac"
+# NOTE: The game update renamed the default body PAC file (dropped the "cd_" prefix).
+DEFAULT_PAC_NAME = "phw_00_nude_00_0001_damian.pac"
+# Legacy file names kept for migration of users who installed before the game update.
+LEGACY_DEFAULT_PAC_NAMES = [
+    "cd_phw_00_nude_00_0001_damian.pac",
+]
 DEFAULT_CHAR_ID = "damiane"
 DEFAULT_CHAR_NAME = "Damiane"
 

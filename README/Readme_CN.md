@@ -90,7 +90,7 @@ Body Slider Pro 是一款为 **Crimson Desert** 模型提供"滑块调节"的工
 
 如果你喜欢某个 MOD 的体型，想通过滑块调节它：
 
-1. 从该 MOD 中找到对应角色的 `.pac` 文件（例如 Damiane 通常为 `cd_phw_00_nude_00_0001_damian.pac`）。
+1. 从该 MOD 中找到对应角色的 `.pac` 文件（例如 Damiane 通常为 `phw_00_nude_00_0001_damian.pac`，旧版游戏为 `cd_phw_00_nude_00_0001_damian.pac`）。
    - 注意：该 `.pac` 必须与当前角色的原始 PAC 是**同一个角色/物品**。
 2. 在 Body Slider Pro 中：
     - 点击 **+ 添加自定义滑块**。

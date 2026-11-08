@@ -90,7 +90,7 @@ You just want to adjust your body shape. No modding knowledge required.
 
 If you like another modder's body shape and want sliders for it:
 
-1. Find that mod's `.pac` file (e.g. `cd_phw_00_nude_00_0001_damian.pac` for Damiane).
+1. Find that mod's `.pac` file (e.g. `phw_00_nude_00_0001_damian.pac` for Damiane; older game versions used `cd_phw_00_nude_00_0001_damian.pac`).
    - Important: It must be the **same character/item** as your Original PAC.
 2. In Body Slider Pro:
     - Click **+ Add Custom Slider**.
